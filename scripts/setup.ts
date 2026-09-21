@@ -1,8 +1,8 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { expectArray, expectBoolean, expectLiteral, expectRecord, expectSafeInteger, expectString } from '../types/runtime.ts';
 import { ROOT, PIN, CORPUS_PIN, CORPUS_TREE, REF, run, versions } from './tools.ts';
-
 type FixtureClass = 'y' | 'n' | 'i';
 type CorpusExpected = 'byte-excluded' | 'accept' | 'reject' | 'bom-reject' | 'surrogate-reject';
 interface GitTreeEntry {
@@ -35,7 +35,53 @@ interface RetainedManifest {
   licenseSha256: string;
   fixtures: ManifestEntry[];
 }
-
+function parseManifest(value: unknown): RetainedManifest {
+  const record = expectRecord(value, 'retained manifest');
+  const fixtureValues = expectArray(record['fixtures'], 'retained manifest fixtures');
+  const fixtures: ManifestEntry[] = fixtureValues.map((item, index) => {
+    const fixture = expectRecord(item, `retained fixture ${index}`);
+    return {
+      name: expectString(fixture['name'], `retained fixture ${index}.name`),
+      class: expectLiteral(fixture['class'], ['y', 'n', 'i'], `retained fixture ${index}.class`),
+      url: expectString(fixture['url'], `retained fixture ${index}.url`),
+      bytes: expectSafeInteger(fixture['bytes'], `retained fixture ${index}.bytes`),
+      gitBlob: expectString(fixture['gitBlob'], `retained fixture ${index}.gitBlob`),
+      sha256: expectString(fixture['sha256'], `retained fixture ${index}.sha256`),
+      strictUtf8: expectBoolean(fixture['strictUtf8'], `retained fixture ${index}.strictUtf8`),
+      leadingBom: expectBoolean(fixture['leadingBom'], `retained fixture ${index}.leadingBom`),
+      expected: expectLiteral(
+        fixture['expected'],
+        ['byte-excluded', 'accept', 'reject', 'bom-reject', 'surrogate-reject'],
+        `retained fixture ${index}.expected`,
+      ),
+    };
+  });
+  return {
+    revision: expectString(record['revision'], 'retained revision'),
+    tree: expectString(record['tree'], 'retained tree'),
+    licenseUrl: expectString(record['licenseUrl'], 'retained license URL'),
+    licenseSha256: expectString(record['licenseSha256'], 'retained license hash'),
+    fixtures,
+  };
+}
+function parseTree(value: unknown): GitTree {
+  const record = expectRecord(value, 'corpus tree');
+  const entries = expectArray(record['tree'], 'corpus tree entries').map((item, index) => {
+    const entry = expectRecord(item, `corpus tree entry ${index}`);
+    return {
+      path: expectString(entry['path'], `tree entry ${index}.path`),
+      type: expectLiteral(entry['type'], ['blob'], `tree entry ${index}.type`),
+      mode: expectLiteral(entry['mode'], ['100644', '100755'], `tree entry ${index}.mode`),
+      sha: expectString(entry['sha'], `tree entry ${index}.sha`),
+      size: expectSafeInteger(entry['size'], `tree entry ${index}.size`),
+    };
+  });
+  return {
+    truncated: expectBoolean(record['truncated'], 'corpus tree truncated'),
+    sha: expectString(record['sha'], 'corpus tree SHA'),
+    tree: entries,
+  };
+}
 if (!existsSync(REF)) {
   mkdirSync(resolve(ROOT, '.tools'), { recursive: true });
   run('git', ['clone', '--filter=blob:none', '--no-checkout', 'https://github.com/bendlang/bend.git', REF], { timeout: 120000 });
@@ -74,7 +120,7 @@ const licenseUrl = `https://raw.githubusercontent.com/nst/JSONTestSuite/${CORPUS
 const licenseSha256 = '8bd0e0578be788c617ea01d18b2a8146e3746ae50bddadc65a5f9d3aad08ad49';
 const manifestPath = resolve(base, 'manifest.json');
 const retained = existsSync(manifestPath)
-  ? JSON.parse(readFileSync(manifestPath, 'utf8')) as RetainedManifest
+  ? parseManifest(JSON.parse(readFileSync(manifestPath, 'utf8')))
   : null;
 if (retained && (retained.revision !== CORPUS_PIN || retained.tree !== CORPUS_TREE
   || retained.licenseUrl !== licenseUrl || retained.licenseSha256 !== licenseSha256
@@ -100,7 +146,7 @@ function verifyTree(entries: readonly GitTreeEntry[]): void {
 const treePath = resolve(base, 'tree.json');
 const api = `https://api.github.com/repos/nst/JSONTestSuite/git/trees/${CORPUS_TREE}`;
 const treeBytes = existsSync(treePath) ? localBytes(treePath) : await fetchBytes(api);
-const tree = JSON.parse(treeBytes.toString()) as GitTree;
+const tree = parseTree(JSON.parse(treeBytes.toString()));
 if (tree.truncated || tree.sha !== CORPUS_TREE || !Array.isArray(tree.tree)) throw new Error('Incomplete corpus tree');
 verifyTree(tree.tree);
 if (!existsSync(treePath)) writeFileSync(treePath, treeBytes, { flag: 'wx' });

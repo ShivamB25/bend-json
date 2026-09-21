@@ -20,6 +20,7 @@
     "allowUnusedLabels": false,
     "isolatedModules": true,
     "moduleDetection": "force",
+    "allowArbitraryExtensions": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
@@ -31,7 +32,8 @@
     "scripts/**/*.ts",
     "tests/**/*.ts",
     "examples/**/*.ts",
-    "types/**/*.d.ts"
+    "types/**/*.d.ts",
+    "json.d.bend.ts"
   ],
   "exclude": [
     ".tools",

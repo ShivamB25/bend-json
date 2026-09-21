@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { expectArray, expectBoolean, expectLiteral, expectRecord, expectSafeInteger, expectString } from '../types/runtime.ts';
 import { ROOT, CORPUS_PIN, CORPUS_TREE } from '../scripts/tools.ts';
 import {
   corpusLimits,
@@ -63,11 +64,37 @@ const profile: Readonly<Partial<Record<ParseCode, true>>> = {
   PInvalidScalar: true,
   PLeadingBom: true,
 };
+function parseManifest(value: unknown): CorpusManifest {
+  const record = expectRecord(value, 'corpus manifest');
+  const fixtureValues = expectArray(record['fixtures'], 'corpus manifest fixtures');
+  const fixtures: ManifestFixture[] = fixtureValues.map((item, index) => {
+    const fixture = expectRecord(item, `corpus manifest fixture ${index}`);
+    return {
+      name: expectString(fixture['name'], `fixture ${index}.name`),
+      class: expectLiteral(fixture['class'], ['y', 'n', 'i'], `fixture ${index}.class`),
+      bytes: expectSafeInteger(fixture['bytes'], `fixture ${index}.bytes`),
+      gitBlob: expectString(fixture['gitBlob'], `fixture ${index}.gitBlob`),
+      sha256: expectString(fixture['sha256'], `fixture ${index}.sha256`),
+      strictUtf8: expectBoolean(fixture['strictUtf8'], `fixture ${index}.strictUtf8`),
+      leadingBom: expectBoolean(fixture['leadingBom'], `fixture ${index}.leadingBom`),
+      expected: expectLiteral(
+        fixture['expected'],
+        ['byte-excluded', 'accept', 'reject', 'bom-reject', 'surrogate-reject'],
+        `fixture ${index}.expected`,
+      ),
+    };
+  });
+  return {
+    revision: expectString(record['revision'], 'manifest revision'),
+    tree: expectString(record['tree'], 'manifest tree'),
+    licenseSha256: expectString(record['licenseSha256'], 'manifest license hash'),
+    fixtures,
+  };
+}
 let cached: CorpusEntry[] | undefined;
 export function corpusEntries(): CorpusEntry[] {
   if (cached) return cached;
-  // The retained manifest is subsequently checked against every raw byte/hash field.
-  const manifest = JSON.parse(readFileSync(resolve(base, 'manifest.json'), 'utf8')) as CorpusManifest;
+  const manifest = parseManifest(JSON.parse(readFileSync(resolve(base, 'manifest.json'), 'utf8')));
   assert.equal(manifest.revision, CORPUS_PIN);
   assert.equal(manifest.tree, CORPUS_TREE);
   assert.equal(manifest.fixtures.length, 318);

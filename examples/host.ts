@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import CoreImport from '../json.bend';
-import type { JsonCore } from '../tests/support.ts';
+import Core from '../json.bend';
 
-const Core = CoreImport as JsonCore;
 const limits = Core['Json.default_limits']();
 const input = '{"x":[-1.5e+2,"\\u0041"]}';
 const parsed = Core['Json.parse'](input, limits);
