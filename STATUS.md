@@ -2,7 +2,7 @@
 
 Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure implementation, frozen API, five safe proofs, 33 proof controls, both 6,071-case host suites, examples, benchmark campaign and canonical native campaign passed. CI execution remains unverified; no public release/package has been performed.
 
-**Repository policy:** the authorized destination is the private GitHub repository `https://github.com/shivamb25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
+**Repository policy:** the authorized destination is the private GitHub repository `https://github.com/ShivamB25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
 
 ## Validated evidence
 

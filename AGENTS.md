@@ -8,7 +8,7 @@ Do not copy another JSON implementation, add host JSON fallbacks, fork/modify th
 
 ## Private GitHub repository and licensing
 
-This repository is authorized for the private GitHub destination `https://github.com/shivamb25/bend-json`. Configure only `origin` to that exact URL and push only while GitHub reports `PRIVATE` visibility. Do not add another remote, change visibility, publish a public package/release, upload generated artifacts, or otherwise distribute the repository unless the owner explicitly authorizes it. `.gitignore` reduces accidental inclusion of local credentials and generated state, but it does not control remote visibility or protect already tracked content. Never commit secrets.
+This repository is authorized for the private GitHub destination `https://github.com/ShivamB25/bend-json`. Configure only `origin` to that exact URL and push only while GitHub reports `PRIVATE` visibility. Do not add another remote, change visibility, publish a public package/release, upload generated artifacts, or otherwise distribute the repository unless the owner explicitly authorizes it. `.gitignore` reduces accidental inclusion of local credentials and generated state, but it does not control remote visibility or protect already tracked content. Never commit secrets.
 
 Original project source and documentation are licensed under the MIT License in `LICENSE.md`, Copyright (c) 2026 Shivam Bansal. The vendored JSONTestSuite bytes retain their separate upstream MIT notice at `tests/fixtures/JSONTestSuite/LICENSE`, Copyright (c) 2016 Nicolas Seriot. Do not replace, merge or remove that fixture notice. Ignored upstream tooling under `.tools/` retains its own licensing and is not part of this repository's tracked source.
 

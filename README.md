@@ -4,7 +4,7 @@ An original, pure Bend 2 JSON library with lossless number spelling, Unicode-sca
 
 **Development status:** local v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, all 33 proof-gate controls, Bend/Node/Bun examples, both 6,071-case host suites and the canonical native campaign passed; CI execution remains unverified and no public release/package has been performed. See [STATUS.md](STATUS.md), the authoritative [SPEC.md](SPEC.md), and [docs/VERIFICATION.md](docs/VERIFICATION.md) for exact evidence boundaries.
 
-**Repository status:** private GitHub repository at [`shivamb25/bend-json`](https://github.com/shivamb25/bend-json). Pushes are authorized only to that private `origin`; do not add another remote, change visibility, or create a public release/package without explicit authorization. `.gitignore` is only an inclusion safeguard and does not control visibility or protect tracked content.
+**Repository status:** private GitHub repository at [`ShivamB25/bend-json`](https://github.com/ShivamB25/bend-json). Pushes are authorized only to that private `origin`; do not add another remote, change visibility, or create a public release/package without explicit authorization. `.gitignore` is only an inclusion safeguard and does not control visibility or protect tracked content.
 
 ## Pinned prerequisites and setup
 
