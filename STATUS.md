@@ -1,10 +1,10 @@
 # Current status
 
-Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure Bend implementation, frozen API, five safe proofs, 33 proof controls, strictly typed TypeScript host harness, both 6,071-case host suites, examples, benchmark campaign and required-native campaign passed locally; the previous private Ubuntu/macOS CI record predates the TypeScript migration. No public release/package has been performed.
+Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure Bend implementation, frozen API, five safe proofs, 33 proof controls, strictly typed TypeScript host harness, both 6,071-case host suites, examples, benchmark campaign, required-native campaign and private Ubuntu/macOS CI passed. No public release/package has been performed.
 
 **Repository policy:** the authorized destination is the private GitHub repository `https://github.com/ShivamB25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
 
-**Language boundary:** `json.bend`, `LAWS.bend` and `PROOF.bend` remain the implementation and proof graph. The 20 `.ts` files are dev-only host orchestration for loaders, corpus bytes, subprocesses, native compilation, mutation recovery and benchmarks; no TypeScript production parser or encoder exists. TypeScript 7.0.2 and `@types/node` 26.6.2 are the only direct locked dev dependencies. GitHub Linguist does not yet recognize `.bend`, so its language bar reflects the recognized TypeScript harness.
+**Language boundary:** `json.bend`, `LAWS.bend` and `PROOF.bend` remain the implementation and proof graph. The 20 `.ts` files are dev-only host orchestration for loaders, corpus bytes, subprocesses, native compilation, mutation recovery and benchmarks; no TypeScript production parser or encoder exists. TypeScript 7.0.2 and `@types/node` 26.6.2 are the only direct locked dev dependencies. GitHub Linguist does not yet recognize `.bend`; after commit `76eace7`, the language API reported exactly `{"TypeScript":242489}` with no JavaScript classification.
 
 ## Validated evidence
 
@@ -36,7 +36,7 @@ Native calibration targeted 100 ms and capped batches at 1,024; 84 native measur
 
 `artifacts/verification.json` has status `pass` for all six gates: `proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun` and `native`, with `required: true` in `artifacts/native.json`. It started at `2026-09-21T13:04:07.548Z`, finished at `2026-09-21T13:15:00.068Z`, and ran for 652.520 seconds. Both host workers passed 6,071 cases with zero failures. `bun run typecheck` and the 465-measurement benchmark also passed.
 
-Private push-triggered CI run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) verified commit `a3b1a64` before the TypeScript migration. The updated workflow now installs the frozen dev lock and type-checks before setup, Gate A and `verify --native=required`; a new cross-platform run is required after this change is pushed.
+Private push-triggered CI run [`35606110009`](https://github.com/ShivamB25/bend-json/actions/runs/35606110009) verified TypeScript migration commit `76eace7`. The Ubuntu 24.04 job (`106353474202`) and macOS 15 job (`106353474305`) both passed frozen dev-tool installation, strict type checking, setup, Gate A and `verify --native=required`.
 
 ## Diagnosis
 
@@ -50,7 +50,7 @@ The earlier native C-emission timeouts came from U32 literal-pattern expansion i
 | C: complete grammar/encoder finite coverage | Node/Bun/native canonical campaign passed |
 | D: independent runtime/resource evidence | Final integrated report passed host-node, host-bun and native gates |
 | E: examples and measured delivery | Examples, benchmark campaign and final evidence promotion passed locally |
-| CI | Private run `35589618477` passed Ubuntu 24.04 and macOS 15 for commit `a3b1a64` |
+| CI | Private run `35606110009` passed Ubuntu 24.04 and macOS 15 for TypeScript migration commit `76eace7` |
 
 ## Commands and source pointers
 
@@ -66,7 +66,7 @@ node scripts/verify.ts --native=required
 node scripts/bench.ts
 ```
 
-Setup/probe, strict TypeScript, both restricted proof commands, the final required-native local verification and the full benchmark passed. `artifacts/verification.json` is the canonical local acceptance report; GitHub run `35589618477` remains the prior cross-platform record until the TypeScript migration's CI run completes.
+Setup/probe, strict TypeScript, both restricted proof commands, the final required-native local verification and the full benchmark passed. `artifacts/verification.json` is the canonical local acceptance report; GitHub run `35606110009` is the cross-platform execution record for the TypeScript migration.
 
 - [SPEC.md](SPEC.md): exact API/types/errors/offsets/limits, five formal rows, twelve behavior IDs and roadmap.
 - [README.md](README.md): pinned setup/import/ABI, runnable examples and supported behavior.

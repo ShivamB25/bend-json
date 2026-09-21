@@ -42,7 +42,7 @@ Commands run from the project root; scripts set `BEND_NO_TELEMETRY=1`, verify pi
 | `node scripts/verify.ts --native=required` | Final canonical native gate passed; `artifacts/native.json` status `pass`, `required: true` |
 | `node scripts/bench.ts` | Passed actual Node/Bun/native lanes; `artifacts/bench.json` records 465 measurements and the watchdog control |
 | Bend and Node/Bun examples in README | Main observed all three execute the nested number/Unicode slice successfully |
-| GitHub Actions workflow | Prior private run `35589618477` passed before the TypeScript migration; updated cross-platform execution pending push |
+| GitHub Actions workflow | Private run `35606110009` passed Ubuntu 24.04 and macOS 15 for TypeScript migration commit `76eace7` |
 
 Main's source-selection controls covered protected dirty-default checkout, fallback and explicit `BEND_REF`, with source files preserved. Neither selection nor setup may reset/modify an existing checkout. Offline fixture verification uses retained tree metadata and raw bytes rather than silently refetching corrupt data.
 
@@ -207,7 +207,7 @@ Immutable action pins:
 - `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020`
 - `oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6`
 
-Linux CI selects exact noble package `clang-18=1:18.1.3-1ubuntu1` with `CC=/usr/bin/clang-18`; macOS selects Apple Clang and records the image. Private run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) passed both jobs for pre-migration commit `a3b1a64`. The updated workflow adds frozen dev-tool installation and strict type checking before setup, Gate A and `verify --native=required`; its new run is pending push.
+Linux CI selected exact noble package `clang-18=1:18.1.3-1ubuntu1` with `CC=/usr/bin/clang-18`; macOS selected Apple Clang and recorded the image. Private run [`35606110009`](https://github.com/ShivamB25/bend-json/actions/runs/35606110009) passed both jobs for TypeScript migration commit `76eace7`: Ubuntu job [`106353474202`](https://github.com/ShivamB25/bend-json/actions/runs/35606110009/job/106353474202) completed at `2026-09-21T13:46:46Z`, and macOS job [`106353474305`](https://github.com/ShivamB25/bend-json/actions/runs/35606110009/job/106353474305) completed at `2026-09-21T13:44:25Z`. Each job installed the frozen dev lock and ran strict type checking before setup, Gate A and `verify --native=required`.
 
 ## Pinned source/evidence table
 
