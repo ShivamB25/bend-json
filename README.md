@@ -4,6 +4,8 @@ An original, pure Bend 2 JSON library with lossless number spelling, Unicode-sca
 
 **Development status:** local v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, all 33 proof-gate controls, Bend/Node/Bun examples, both 6,071-case host suites and the canonical native campaign passed; CI execution and publication remain unverified/not performed. See [STATUS.md](STATUS.md), the authoritative [SPEC.md](SPEC.md), and [docs/VERIFICATION.md](docs/VERIFICATION.md) for exact evidence boundaries.
 
+**Repository status:** private/local. Do not configure a remote or push, publish or upload this repository. `AGENTS.md` is authoritative; `.githooks/pre-push` provides a local technical block when activated with `git config --local core.hooksPath .githooks`. `.gitignore` is only an inclusion safeguard and does not prevent pushes.
+
 ## Pinned prerequisites and setup
 
 - Bend 2.0.16 source revision `15ae0c86f3193b8f645b4bedbc438655b648d0da`.
@@ -188,3 +190,11 @@ All five formal obligations passed the safe checker: every Boolean, concrete nul
 ## Scope and next versions
 
 No package publication, framework, HTTP, database, GPU parsing or copied parser is part of this work. After a stable v0.1, v0.2 targets typed decoders/builders, explicit numeric conversions, distinct missing/null behavior, duplicate-name ambiguity errors and structural field/index paths. v0.3 follows real use and measured encoding needs. Bytes, incremental parsing and NDJSON are later capability-driven work; see the [roadmap](SPEC.md#prioritized-roadmap-not-v01-features).
+
+## License
+
+Original project source and documentation are available under the [MIT License](LICENSE.md), Copyright (c) 2026 Shivam Bansal.
+
+The vendored JSONTestSuite fixtures keep their independent upstream MIT license and attribution in [`tests/fixtures/JSONTestSuite/LICENSE`](tests/fixtures/JSONTestSuite/LICENSE), Copyright (c) 2016 Nicolas Seriot. The ignored Bend compiler checkout under `.tools/` is not tracked here and remains under its upstream license.
+
+The license defines permissions if a copy is distributed; it does not change the current private/no-push repository policy.

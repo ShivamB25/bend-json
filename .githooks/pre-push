@@ -1,0 +1,8 @@
+#!/bin/sh
+
+cat >&2 <<'EOF'
+Push blocked: bend-json is intentionally private/local.
+AGENTS.md prohibits publishing or pushing this repository.
+To change this policy, update AGENTS.md and this hook in a reviewed commit for a specific authorized remote.
+EOF
+exit 1

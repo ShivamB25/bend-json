@@ -2,6 +2,8 @@
 
 Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure implementation, frozen API, five safe proofs, 33 proof controls, both 6,071-case host suites, examples, benchmark campaign and canonical native campaign passed. CI execution remains unverified; no publication or push was performed.
 
+**Repository policy:** this checkout remains private/local. No remote is configured and publishing/pushing is prohibited by `AGENTS.md`; `.githooks/pre-push` is the technical local safeguard. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
+
 ## Validated evidence
 
 1. **Pinned setup and strengthened Gate A passed.** Bend 2.0.16 at `15ae0c86f3193b8f645b4bedbc438655b648d0da`, Node v26.9.0, Bun 1.4.2, Apple Clang 21.0.0 (`clang-2100.1.1.101`), Apple M2/arm64. Real imports/ABI and primitive String/List work through 262,144 passed. Native now executes consuming computed-state and output-budget loops, carried failures, zero/exact capacity and reversals; Main observed the strengthened gate complete in 3.46 seconds. Evidence: `artifacts/probe.json`.

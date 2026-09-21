@@ -1,5 +1,22 @@
+# Ignores do not prevent Git pushes. AGENTS.md and .githooks/pre-push enforce private mode.
 .tools/
 artifacts/
 .probes/
 .codegraph/
 .DS_Store
+
+# Machine-local tooling state.
+.serena/cache/
+.serena/project.local.yml
+
+# Local credentials and private notes.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+.private/
+credentials.local.*
+secrets.local.*
