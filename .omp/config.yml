@@ -1,0 +1,13 @@
+# Project-only routing; global provider, advisor and other preferences stay unchanged.
+modelRoles:
+  default: openai-codex/gpt-6-astra:xhigh
+  plan: openai-codex/gpt-6-astra:xhigh
+  task: openai-codex/gpt-5.6-luna:max
+defaultThinkingLevel: xhigh
+task:
+  agentModelOverrides:
+    task: "@task"
+    reviewer: openai-codex/gpt-5.6-luna:max
+    scout: openai-codex/gpt-5.6-luna:max
+    sonic: openai-codex/gpt-5.6-luna:max
+    security-reviewer: openai-codex/gpt-5.6-luna:max

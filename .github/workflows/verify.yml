@@ -1,0 +1,45 @@
+name: verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      BEND_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '26.9.0'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.4.2'
+      - name: Select pinned Linux compiler
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-18=1:18.1.3-1ubuntu1
+          echo 'CC=/usr/bin/clang-18' >> "$GITHUB_ENV"
+          /usr/bin/clang-18 --version
+      - name: Record Apple compiler and image
+        if: runner.os == 'macOS'
+        run: |
+          echo 'CC=/usr/bin/clang' >> "$GITHUB_ENV"
+          /usr/bin/clang --version
+          sw_vers
+          printf 'ImageOS=%s ImageVersion=%s\n' "$ImageOS" "$ImageVersion"
+      - name: Acquire and verify pinned sources and raw fixtures
+        run: node scripts/setup.mjs
+      - name: Run capability gate
+        run: node scripts/probe.mjs
+      - name: Run full verification including native
+        run: node scripts/verify.mjs --native=required
