@@ -1,6 +1,6 @@
 # Verification record
 
-Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** Setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign and the canonical native campaign passed. CI execution remains unverified; the GitHub repository is private and no public release/package has been performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
+Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** Setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign, the canonical native campaign and private Ubuntu/macOS CI passed. The GitHub repository is private and no public release/package has been performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
 
 ## Revisions and environment
 
@@ -187,7 +187,7 @@ The canonical integrated report [`artifacts/verification.json`](../artifacts/ver
 
 `artifacts/release-summary.json` is the compact derived canonical report (`SHA-256 23d08c2b58cfe30bd4480b0806df7057fe2fab36b04f7c63de96b782aa36c958`); `artifacts/cleanup.json` records the verified diagnostic archive and retained canonical reports/inputs. Archived diagnostic scripts are historical evidence, not current runnable commands.
 
-## CI contract (not an execution claim)
+## CI execution evidence
 
 `.github/workflows/verify.yml` is required to use ordinary `ubuntu-24.04`/`macos-15` jobs, triggers `push`, `pull_request`, `workflow_dispatch`, `permissions: contents: read`, `timeout-minutes: 45`, and `BEND_NO_TELEMETRY=1`. Both jobs select Node 26.9.0/Bun 1.4.2, run setup and then `verify --native=required`.
 
@@ -197,7 +197,7 @@ Immutable action pins:
 - `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020`
 - `oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6`
 
-Linux must install exact noble package `clang-18=1:18.1.3-1ubuntu1` and set `CC=/usr/bin/clang-18`; unavailable provisioning fails rather than selecting latest. macOS uses selected Apple Clang and records its exact version/image. No dependency cache, publishing permissions, cluster/GPU requirement or warning suppression. CI execution remains unverified until a real run exists.
+Linux used exact noble package `clang-18=1:18.1.3-1ubuntu1` with `CC=/usr/bin/clang-18`; macOS used the selected Apple Clang/image. Private push-triggered run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) verified commit `a3b1a64`: `verify (ubuntu-24.04)` and `verify (macos-15)` both completed successfully. The run retained the no-cache, no-publishing-permissions, no-cluster/GPU and no-warning-suppression boundaries.
 
 ## Pinned source/evidence table
 
@@ -222,4 +222,4 @@ The checker, imported Base statements, compiler lowering/optimizations, host loa
 
 The harness trusts strict decoding, hash verification, deterministic generators, iterative comparators, deadlines, process reaping and event accounting; self-tests reduce but do not eliminate that trust. Host JSON.parse is only a restricted independent oracle. Corpus evidence is finite and profile-specific. Measured behavior on this Apple M2 is not a portable throughput guarantee or proof of every custom budget.
 
-The law inventory's immutable baseline is a review commitment: rewriting laws, specification and verifier together can defeat a same-repository guard. No gate may silently drop an obligation, fixture, backend failure or performance failure to become green. Local acceptance is complete; retain the CI-unverified boundary and record any future unresolved blocker explicitly in STATUS.
+The law inventory's immutable baseline is a review commitment: rewriting laws, specification and verifier together can defeat a same-repository guard. No gate may silently drop an obligation, fixture, backend failure or performance failure to become green. Local acceptance and the recorded private cross-platform CI run are complete; preserve the exact commit/run boundary and record any future unresolved blocker explicitly in STATUS.

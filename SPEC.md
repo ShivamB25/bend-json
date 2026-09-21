@@ -1,6 +1,6 @@
 # Bend JSON v0.1 contract
 
-Status: local v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, 33 proof controls, Bend/Node/Bun examples, both 6,071-case combined real-import host suites and the canonical native campaign passed. CI execution remains unverified; the GitHub repository is private and no public release/package has been performed. See [STATUS.md](STATUS.md) and [verification evidence](docs/VERIFICATION.md). Finite host results and benchmark diagnostics are not universal grammar, roundtrip or complexity proofs.
+Status: v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, 33 proof controls, Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the canonical native campaign and private Ubuntu/macOS CI passed. The GitHub repository is private and no public release/package has been performed. See [STATUS.md](STATUS.md) and [verification evidence](docs/VERIFICATION.md). Finite host results and benchmark diagnostics are not universal grammar, roundtrip or complexity proofs.
 
 ## Representation and supported API
 
@@ -170,7 +170,7 @@ Each row names a finite runtime evidence obligation, not a universal theorem. Ad
 | JSON-R009 | Exact structural roundtrip for bounded independently generated ASTs | properties and native construction batches | 3,000 generated ASTs per host and native passed |
 | JSON-R010 | Real child-directory/host imports and exact primitive/ADT ABI | `scripts/probe.mjs`, real host examples | Gate A and actual Bend/Node/Bun JSON examples passed |
 | JSON-R011 | Strict UTF-8 boundary, BOM retention and all 318 original names | setup manifest/tree and conformance accounting | Node/Bun/native passed: 293 String calls, 25 byte exclusions each; offline integrity controls passed |
-| JSON-R012 | Node/Bun/CPU-native recursive execution, default-size resource tests and measurements | probe, verify, bench | Canonical integrated report passed all six gates; CI remains unrun |
+| JSON-R012 | Node/Bun/CPU-native recursive execution, default-size resource tests and measurements | probe, verify, bench | Canonical integrated report passed all six gates; private Ubuntu/macOS CI run `35589618477` passed |
 
 ## Measured benchmark evidence
 

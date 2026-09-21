@@ -1,6 +1,6 @@
 # Current status
 
-Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure implementation, frozen API, five safe proofs, 33 proof controls, both 6,071-case host suites, examples, benchmark campaign and canonical native campaign passed. CI execution remains unverified; no public release/package has been performed.
+Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure implementation, frozen API, five safe proofs, 33 proof controls, both 6,071-case host suites, examples, benchmark campaign, canonical native campaign and private Ubuntu/macOS CI passed. No public release/package has been performed.
 
 **Repository policy:** the authorized destination is the private GitHub repository `https://github.com/ShivamB25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
 
@@ -34,7 +34,7 @@ Native calibration targeted 100 ms and capped batches at 1,024; below-target and
 
 `artifacts/verification.json` has status `pass` for all six gates: `proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun` and `native`. It started at `2026-09-21T08:14:53.445Z`, finished at `2026-09-21T08:23:40.858Z`, and ran for 527.413 seconds. Both host workers passed 6,071 cases with zero failures. No native or benchmark work remains locally.
 
-The remaining delivery boundary is CI: the pinned Ubuntu/macOS workflow is prepared but unexecuted. Main retained canonical reports, native failure/interrupted inputs and the verified diagnostic archive; private repository hosting is not a public release and does not claim CI execution.
+Private push-triggered CI run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) verified commit `a3b1a64`: Ubuntu 24.04 and macOS 15 both completed setup, strengthened Gate A and `verify --native=required` successfully. Main retained canonical local reports, native failure/interrupted inputs and the verified diagnostic archive. Private repository hosting and CI success are not a public release.
 
 ## Diagnosis
 
@@ -48,7 +48,7 @@ The earlier native C-emission timeouts came from U32 literal-pattern expansion i
 | C: complete grammar/encoder finite coverage | Node/Bun/native canonical campaign passed |
 | D: independent runtime/resource evidence | Final integrated report passed host-node, host-bun and native gates |
 | E: examples and measured delivery | Examples, benchmark campaign and final evidence promotion passed locally |
-| CI | Pinned Ubuntu/macOS workflow prepared; remote execution unverified |
+| CI | Private run `35589618477` passed Ubuntu 24.04 and macOS 15 for commit `a3b1a64` |
 
 ## Commands and source pointers
 
@@ -62,7 +62,7 @@ node scripts/verify.mjs --native=required
 node scripts/bench.mjs
 ```
 
-Setup/probe, both restricted proof commands and the final integrated verification passed. `artifacts/verification.json` is the canonical local acceptance report; CI remains unrun.
+Setup/probe, both restricted proof commands, the final integrated local verification and private push-triggered CI passed. `artifacts/verification.json` is the canonical local acceptance report; GitHub run `35589618477` is the cross-platform CI record.
 
 - [SPEC.md](SPEC.md): exact API/types/errors/offsets/limits, five formal rows, twelve behavior IDs and roadmap.
 - [README.md](README.md): pinned setup/import/ABI, runnable examples and supported behavior.
@@ -70,4 +70,4 @@ Setup/probe, both restricted proof commands and the final integrated verificatio
 - [docs/VERIFICATION.md](docs/VERIFICATION.md): precise commands, artifacts, corpus/memory/benchmark/CI boundaries and source links.
 - `json.bend`, `LAWS.bend`, `PROOF.bend`: pure runtime and separate proof graph. `scripts/tools.mjs`: selected pinned paths and strict checking.
 
-Default profile remains `Limits{1048576n,128n,4096n,262144n,100000n,2097152n}`. The 16,777,216 custom-limit cap is not a memory-safety promise. No source/contract weakening, silent default reduction, public release/package or CI execution claim is authorized.
+Default profile remains `Limits{1048576n,128n,4096n,262144n,100000n,2097152n}`. The 16,777,216 custom-limit cap is not a memory-safety promise. No source/contract weakening, silent default reduction or public release/package claim is authorized.
