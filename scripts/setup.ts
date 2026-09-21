@@ -1,7 +1,40 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { ROOT, PIN, CORPUS_PIN, CORPUS_TREE, REF, run, versions } from './tools.mjs';
+import { ROOT, PIN, CORPUS_PIN, CORPUS_TREE, REF, run, versions } from './tools.ts';
+
+type FixtureClass = 'y' | 'n' | 'i';
+type CorpusExpected = 'byte-excluded' | 'accept' | 'reject' | 'bom-reject' | 'surrogate-reject';
+interface GitTreeEntry {
+  path: string;
+  type: 'blob';
+  mode: '100644' | '100755';
+  sha: string;
+  size: number;
+}
+interface GitTree {
+  truncated: boolean;
+  sha: string;
+  tree: GitTreeEntry[];
+}
+interface ManifestEntry {
+  name: string;
+  class: FixtureClass;
+  url: string;
+  bytes: number;
+  gitBlob: string;
+  sha256: string;
+  strictUtf8: boolean;
+  leadingBom: boolean;
+  expected: CorpusExpected;
+}
+interface RetainedManifest {
+  revision: string;
+  tree: string;
+  licenseUrl: string;
+  licenseSha256: string;
+  fixtures: ManifestEntry[];
+}
 
 if (!existsSync(REF)) {
   mkdirSync(resolve(ROOT, '.tools'), { recursive: true });
@@ -14,12 +47,12 @@ console.log(JSON.stringify(versions()));
 const base = resolve(ROOT, 'tests/fixtures/JSONTestSuite');
 const target = resolve(base, 'test_parsing');
 mkdirSync(target, { recursive: true });
-async function fetchBytes(url) {
+async function fetchBytes(url: string): Promise<Buffer> {
   const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`${response.status} ${url}`);
   const reader = response.body?.getReader();
   if (!reader) throw new Error(`Missing response body: ${url}`);
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     while (true) {
@@ -40,12 +73,14 @@ async function fetchBytes(url) {
 const licenseUrl = `https://raw.githubusercontent.com/nst/JSONTestSuite/${CORPUS_PIN}/LICENSE`;
 const licenseSha256 = '8bd0e0578be788c617ea01d18b2a8146e3746ae50bddadc65a5f9d3aad08ad49';
 const manifestPath = resolve(base, 'manifest.json');
-const retained = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : null;
+const retained = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, 'utf8')) as RetainedManifest
+  : null;
 if (retained && (retained.revision !== CORPUS_PIN || retained.tree !== CORPUS_TREE
   || retained.licenseUrl !== licenseUrl || retained.licenseSha256 !== licenseSha256
   || !Array.isArray(retained.fixtures))) throw new Error('Invalid retained corpus provenance');
 
-function verifyTree(entries) {
+function verifyTree(entries: readonly GitTreeEntry[]): void {
   if (entries.length !== 318 || new Set(entries.map(item => item.path)).size !== 318
     || entries.some(item => item.type !== 'blob' || !['100644', '100755'].includes(item.mode)
       || !/^[yni]_[^/\0]+\.json$/.test(item.path)
@@ -65,11 +100,11 @@ function verifyTree(entries) {
 const treePath = resolve(base, 'tree.json');
 const api = `https://api.github.com/repos/nst/JSONTestSuite/git/trees/${CORPUS_TREE}`;
 const treeBytes = existsSync(treePath) ? localBytes(treePath) : await fetchBytes(api);
-const tree = JSON.parse(treeBytes.toString());
+const tree = JSON.parse(treeBytes.toString()) as GitTree;
 if (tree.truncated || tree.sha !== CORPUS_TREE || !Array.isArray(tree.tree)) throw new Error('Incomplete corpus tree');
 verifyTree(tree.tree);
 if (!existsSync(treePath)) writeFileSync(treePath, treeBytes, { flag: 'wx' });
-const treeByName = new Map(tree.tree.map(item => [item.path, item]));
+const treeByName = new Map<string, GitTreeEntry>(tree.tree.map(item => [item.path, item]));
 const expectedNames = new Set(treeByName.keys());
 if (retained && (retained.fixtures.length !== 318
   || new Set(retained.fixtures.map(item => item.name)).size !== 318
@@ -77,19 +112,22 @@ if (retained && (retained.fixtures.length !== 318
   throw new Error('Invalid retained fixture inventory');
 }
 if (readdirSync(target).some(name => !expectedNames.has(name))) throw new Error('Unexpected local corpus entry');
-const retainedByName = new Map(retained?.fixtures.map(item => [item.name, item]) || []);
+const retainedByName = new Map<string, ManifestEntry>(
+  retained?.fixtures.map(item => [item.name, item]) ?? [],
+);
 
-function localBytes(path) {
+function localBytes(path: string): Buffer {
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.size > 1048576) throw new Error(`Invalid local fixture: ${path}`);
   return readFileSync(path);
 }
-const counts = { y: 0, n: 0, i: 0 };
-const manifest = [];
+const counts: Record<FixtureClass, number> = { y: 0, n: 0, i: 0 };
+const manifest: ManifestEntry[] = [];
 let index = 0;
 await Promise.all(Array.from({ length: 8 }, async () => {
   while (index < tree.tree.length) {
     const item = tree.tree[index++];
+    assertTreeEntry(item);
     const url = `https://raw.githubusercontent.com/nst/JSONTestSuite/${CORPUS_PIN}/test_parsing/${encodeURIComponent(item.path)}`;
     const path = resolve(target, item.path);
     if (!path.startsWith(target + '/')) throw new Error('Invalid fixture path');
@@ -97,22 +135,27 @@ await Promise.all(Array.from({ length: 8 }, async () => {
     const sha1 = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
     if (bytes.length !== item.size || sha1 !== item.sha) throw new Error(`Corrupt fixture: ${item.path}`);
     if (!existsSync(path)) writeFileSync(path, bytes, { flag: 'wx' });
-    let text;
+    let text: string | undefined;
     try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch {}
     const cls = item.path[0];
+    if (cls !== 'y' && cls !== 'n' && cls !== 'i') throw new Error(`Invalid corpus class: ${item.path}`);
     counts[cls]++;
-    const expected = text === undefined ? 'byte-excluded' : cls === 'y' ? 'accept' : cls === 'n' ? 'reject' : item.path.startsWith('i_number_') || item.path === 'i_structure_500_nested_arrays.json' ? 'accept' : item.path === 'i_structure_UTF-8_BOM_empty_object.json' ? 'bom-reject' : 'surrogate-reject';
-    const entry = { name: item.path, class: cls, url, bytes: bytes.length, gitBlob: sha1, sha256: createHash('sha256').update(bytes).digest('hex'), strictUtf8: text !== undefined, leadingBom: text?.startsWith('\uFEFF') || false, expected };
+    const expected: CorpusExpected = text === undefined ? 'byte-excluded' : cls === 'y' ? 'accept' : cls === 'n' ? 'reject' : item.path.startsWith('i_number_') || item.path === 'i_structure_500_nested_arrays.json' ? 'accept' : item.path === 'i_structure_UTF-8_BOM_empty_object.json' ? 'bom-reject' : 'surrogate-reject';
+    const entry: ManifestEntry = { name: item.path, class: cls, url, bytes: bytes.length, gitBlob: sha1, sha256: createHash('sha256').update(bytes).digest('hex'), strictUtf8: text !== undefined, leadingBom: text?.startsWith('\uFEFF') || false, expected };
     const previous = retainedByName.get(item.path);
-    if (previous && Object.entries(entry).some(([key, value]) => previous[key] !== value)) {
+    if (previous && (Object.keys(entry) as Array<keyof ManifestEntry>).some(key => previous[key] !== entry[key])) {
       throw new Error(`Retained manifest mismatch: ${item.path}`);
     }
     manifest.push(entry);
   }
 }));
-verifyTree(manifest.map(item => ({
-  path: item.name, type: 'blob', mode: treeByName.get(item.name).mode, size: item.bytes, sha: item.gitBlob,
-})));
+verifyTree(manifest.map(item => {
+  const source = treeByName.get(item.name);
+  if (!source) throw new Error(`Missing tree entry: ${item.name}`);
+  return {
+    path: item.name, type: 'blob', mode: source.mode, size: item.bytes, sha: item.gitBlob,
+  };
+}));
 const excluded = manifest.filter(x => !x.strictUtf8);
 if (counts.y !== 95 || counts.n !== 188 || counts.i !== 35
   || excluded.length !== 25 || excluded.filter(x => x.class === 'n').length !== 12
@@ -129,3 +172,7 @@ if (!existsSync(licensePath)) writeFileSync(licensePath, license, { flag: 'wx' }
 manifest.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 if (!retained) writeFileSync(manifestPath, JSON.stringify({ revision: CORPUS_PIN, tree: CORPUS_TREE, licenseUrl, licenseSha256, fixtures: manifest }, null, 2) + '\n', { flag: 'wx' });
 console.log(JSON.stringify({ fixtures: manifest.length, classes: counts, decoded: 293, byteExcluded: 25, leadingBom: manifest.filter(x => x.leadingBom).length }));
+
+function assertTreeEntry(item: GitTreeEntry | undefined): asserts item is GitTreeEntry {
+  if (!item) throw new Error('Corpus tree index escaped its verified bounds');
+}

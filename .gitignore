@@ -3,6 +3,7 @@
 artifacts/
 .probes/
 .codegraph/
+node_modules/
 .DS_Store
 
 # Machine-local tooling state.

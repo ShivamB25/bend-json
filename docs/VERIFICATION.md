@@ -10,11 +10,19 @@ Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the app
 | Selected local source | `.tools/bend` (scripts may select `.tools/bend-15ae0c86` or explicit `BEND_REF`) |
 | Node | `v26.9.0` |
 | Bun | `1.4.2` |
+| TypeScript | `7.0.2`; strict no-emit harness gate |
+| Node declarations | `@types/node` `26.6.2` |
 | Native compiler | Apple clang version 21.0.0 (`clang-2100.1.1.101`) |
 | Compiler target | `arm64-apple-darwin25.6.0` |
 | Machine context | Apple M2, Darwin 25.6.0; benchmark timings measured in `artifacts/bench.json` |
 | JSONTestSuite | `1ef36fa01286573e846ac449e8683f8833c5b26a` |
 | Parsing tree | `b936f9acdd24b9f5fefe68b90b9beab2c681137a` |
+
+## Language and type-safety boundary
+
+The runtime and proof graph are Bend (`json.bend`, `LAWS.bend`, `PROOF.bend`). TypeScript is limited to the host harness that performs source acquisition, proof inventory checks, corpus byte validation, Node/Bun ABI testing, subprocess supervision, native compilation, mutation recovery and benchmarks. The locked workspace has no runtime dependencies and only two direct dev dependencies: TypeScript 7.0.2 and `@types/node` 26.6.2. `tsc --noEmit` runs with strict mode, unchecked-index protection, exact optional properties, erasable syntax and explicit `.ts` imports.
+
+GitHub Linguist does not currently classify `.bend` files, so repository language percentages reflect the recognized TypeScript harness. No Linguist override aliases Bend to another language, and no TypeScript parser/encoder substitutes for the Bend API.
 
 Runtime/compiler values are recorded in [`artifacts/probe.json`](../artifacts/probe.json). All `artifacts/` links are generated ignored local evidence, not assumed checked-in release attachments. Fixture provenance, sizes, Git blob hashes and SHA-256 are in [`manifest.json`](../tests/fixtures/JSONTestSuite/manifest.json). [`tree.json`](../tests/fixtures/JSONTestSuite/tree.json) retains original Git `100644`/`100755` modes to reconstruct the pinned tree hash; modes are metadata only, never instructions to execute/chmod fixture data. Setup retains the original [MIT license](../tests/fixtures/JSONTestSuite/LICENSE), Copyright (c) 2016 Nicolas Seriot. No fixture parser/runner code is imported.
 
@@ -24,15 +32,17 @@ Commands run from the project root; scripts set `BEND_NO_TELEMETRY=1`, verify pi
 
 | Command | Current evidence |
 |---|---|
-| `node scripts/setup.mjs` | Passed acquisition and version prerequisites; Main also observed offline raw-byte/tree/license verification and corruption rejection |
-| `node scripts/probe.mjs` | Passed; saved host/native outputs in `artifacts/probe.json` |
-| `node scripts/verify.mjs --proofs` | Passed inventory and both safe checks; `artifacts/proofs.json` |
-| `node scripts/verify.mjs --proof-gate-selftest` | Passed all 33 controls; `artifacts/proof-gate-selftest.json` |
-| `node scripts/verify.mjs` | Final integrated report passed; `artifacts/verification.json` records all six gates and 6,071 host cases per runtime |
-| `node scripts/verify.mjs --native=required` | Final canonical native gate passed; `artifacts/native.json` status `pass`, `required: true` |
-| `node scripts/bench.mjs` | Passed actual Node/Bun/native lanes; `artifacts/bench.json` records 465 measurements and the watchdog control |
+| `bun install --frozen-lockfile` | Passed with no lockfile changes; installs dev-only TypeScript/Node declarations |
+| `bun run typecheck` | Passed strict TypeScript 7.0.2 checking with no emitted JavaScript |
+| `node scripts/setup.ts` | Passed acquisition and version prerequisites; Main also observed offline raw-byte/tree/license verification and corruption rejection |
+| `node scripts/probe.ts` | Passed; saved host/native outputs in `artifacts/probe.json` |
+| `node scripts/verify.ts --proofs` | Passed inventory and both safe checks; `artifacts/proofs.json` |
+| `node scripts/verify.ts --proof-gate-selftest` | Passed all 33 controls; `artifacts/proof-gate-selftest.json` |
+| `node scripts/verify.ts` | Final integrated report passed; `artifacts/verification.json` records all six gates and 6,071 host cases per runtime |
+| `node scripts/verify.ts --native=required` | Final canonical native gate passed; `artifacts/native.json` status `pass`, `required: true` |
+| `node scripts/bench.ts` | Passed actual Node/Bun/native lanes; `artifacts/bench.json` records 465 measurements and the watchdog control |
 | Bend and Node/Bun examples in README | Main observed all three execute the nested number/Unicode slice successfully |
-| GitHub Actions workflow | Execution unverified |
+| GitHub Actions workflow | Prior private run `35589618477` passed before the TypeScript migration; updated cross-platform execution pending push |
 
 Main's source-selection controls covered protected dirty-default checkout, fallback and explicit `BEND_REF`, with source files preserved. Neither selection nor setup may reset/modify an existing checkout. Offline fixture verification uses retained tree metadata and raw bytes rather than silently refetching corrupt data.
 
@@ -54,11 +64,11 @@ BEND_NO_TELEMETRY=1 bun --no-install .tools/bend/bend2/main.ts PROOF.bend
 Cross-backend host entry points (test orchestration only):
 
 ```sh
-BEND_NO_TELEMETRY=1 bun --no-install --preload ./.tools/bend/bend2/main.ts tests/host.mjs regressions conformance properties mutations
-BEND_NO_TELEMETRY=1 node --import ./.tools/bend/bend2/main.ts tests/host.mjs regressions conformance properties mutations
+BEND_NO_TELEMETRY=1 bun --no-install --preload ./.tools/bend/bend2/main.ts tests/host.ts regressions conformance properties mutations
+BEND_NO_TELEMETRY=1 node --import ./.tools/bend/bend2/main.ts tests/host.ts regressions conformance properties mutations
 ```
 
-These combined suite selections passed with exit 0 and 6,071 passing/zero failing cases each in [`combined-node.json`](../artifacts/combined-node.json) and [`combined-bun.json`](../artifacts/combined-bun.json). Both use the real pinned preload/import path, including all 2,048 mutations in the same worker; no explicit collection, compiler separation or generated bundle is needed. The `.mjs` modules are cross-backend test/benchmark orchestration only, not a production parser or proof substitute.
+These combined suite selections passed with exit 0 and 6,071 passing/zero failing cases each in [`combined-node.json`](../artifacts/combined-node.json) and [`combined-bun.json`](../artifacts/combined-bun.json). Both use the real pinned preload/import path, including all 2,048 mutations in the same worker; no explicit collection, compiler separation or generated bundle is needed. The `.ts` modules are cross-backend test/benchmark orchestration only, not a production parser or proof substitute.
 
 Node's upstream `[DEP0205] module.register()` deprecation warning is expected from the pinned loader ([`bend2/main.ts` lines 604–625](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/bend2/main.ts#L604-L625)) and is retained, not suppressed. Node's current synchronous [`module.registerHooks()`](https://nodejs.org/docs/latest/api/module.html#moduleregisterhooksoptions) API is not a compatible drop-in replacement for this pinned loader; no compiler fork or warning suppression is used. The Bend/native production path does not require Node.
 
@@ -110,7 +120,7 @@ The release gate must capture both streams and require exit 0, no signal/timeout
 
 Inventory separately requires SPEC/json/LAWS/PROOF, the exact baseline ID/name pairs once in the SPEC table, every corresponding top-level law and qualified proof, direct laws import and no root main. All release laws must match the table, not just the five baseline names.
 
-`node scripts/verify.mjs --proof-gate-selftest` passed **33 controls** in [`artifacts/proof-gate-selftest.json`](../artifacts/proof-gate-selftest.json), superseding the earlier isolated helper-only record. The count includes positive/inventory and additional strict-verdict guard controls. Root proofs have their own separate passing artifact.
+`node scripts/verify.ts --proof-gate-selftest` passed **33 controls** in [`artifacts/proof-gate-selftest.json`](../artifacts/proof-gate-selftest.json), superseding the earlier isolated helper-only record. The count includes positive/inventory and additional strict-verdict guard controls. Root proofs have their own separate passing artifact.
 
 | Control | Observed result |
 |---|---|
@@ -160,7 +170,7 @@ Native protocol is `PARSE_DONE`, `PARSE_FAIL<TAB>CODE<TAB>OFFSET`, `DONE<TAB>COM
 
 ## Runtime memory and dispatch diagnosis
 
-The final combined real-preloaded workers include the compiler/import lifecycle and ran all suites together without explicit collection, private cache clearing, baseline subtraction or a separate compiler. Per-case RSS samples (6,071 each) reached **385,204,224 bytes on Node** and **268,009,472 bytes on Bun**. During all 2,048 mutation cases the respective maxima were **385,204,224** and **267,943,936** bytes, below the 536,870,912-byte ceiling.
+The final combined real-preloaded workers include the compiler/import lifecycle and ran all suites together without explicit collection, private cache clearing, baseline subtraction or a separate compiler. Per-case RSS samples (6,071 each) reached **396,607,488 bytes on Node** and **270,581,760 bytes on Bun**. During all 2,048 mutation cases the same respective maxima were observed, below the 536,870,912-byte ceiling.
 
 These are sampled maxima, not continuous peak bounds. The independent supervisor recorded no in-campaign Node or Bun samples (`enforcement: "unverified"`, `samples: 0`); do not upgrade per-case observations into a claim of continuous enforcement or an allocation-safety guarantee.
 
@@ -168,7 +178,7 @@ Earlier high-RSS 4,022-case runs and separate compiler-produced mutation experim
 
 [`native-memory-control-diagnostic.json`](../artifacts/native-memory-control-diagnostic.json) records the native supervisor's independent RSS negative control using a disposable Node child, not a native JSON run. A touched 629,145,600-byte allocation crossed the 536,870,912-byte limit: seven 25 ms samples reached 672,940,032 bytes; the child was killed and reaped with SIGKILL in 189.2885 ms. This proves observed supervisor enforcement/reaping, not allocation safety, native parser execution or zero overshoot.
 
-Canonical native RSS sampling covered 2,047 of 2,048 mutation invocations (one unobserved), with 2,047 samples and a maximum of 1,392,640 bytes against the 536,870,912-byte production ceiling. This is sampled RSS, not an exact continuous peak or allocation-safety guarantee. Distinct 64 MiB/128 MiB controls passed; the 629,145,600-byte independent allocation control remains a separate supervisor negative control.
+Canonical required-native RSS sampling covered all 2,048 mutation invocations, with 2,048 samples and a maximum of 1,392,640 bytes against the 536,870,912-byte production ceiling. This is sampled RSS, not an exact continuous peak or allocation-safety guarantee. Distinct 64 MiB/128 MiB controls passed.
 
 ## Benchmarks
 
@@ -176,16 +186,16 @@ Canonical native RSS sampling covered 2,047 of 2,048 mutation invocations (one u
 
 | Representative fixture | Node parse | Bun parse | Native parse | Node encode | Bun encode | Native encode |
 |---|---:|---:|---:|---:|---:|---:|
-| ASCII, 100,000 scalars | 37.3421 | 85.01744 | 3.890625 | 32.80702 | 75.30912 | 2.6640625 |
-| Wide array, 100,000 values | 99.46131 | 283.04158 | 18.5625 | 78.29123 | 167.41731 | 8.375 |
+| ASCII, 100,000 scalars | 38.82494 | 89.82073 | 3.6875 | 35.23177 | 84.53627 | 2.546875 |
+| Wide array, 100,000 values | 103.45115 | 293.07979 | 16.875 | 83.24844 | 167.25742 | 8.0625 |
 
-Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process startup and correctness checks were outside timed calls. Host eager ABI conversion was inside core calls. Native parse/encode included full result traversal; traversal was measured separately. Equality was the test-only iterative comparator, not a public library API. Reported medians are per-call values after native batching; native `IO.now()` calibration targeted at least 100 ms and capped batches at 1,024 iterations. The artifact marks 83 of 155 native measurements below target precision and 10 below clock resolution, so those flags are not silently converted into precision or throughput claims.
+Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process startup and correctness checks were outside timed calls. Host eager ABI conversion was inside core calls. Native parse/encode included full result traversal; traversal was measured separately. Equality was the test-only iterative comparator, not a public library API. Reported medians are per-call values after native batching; native `IO.now()` calibration targeted at least 100 ms and capped batches at 1,024 iterations. The artifact marks 84 of 155 native measurements below target precision and nine below clock resolution, so those flags are not silently converted into precision or throughput claims.
 
-All 75 increasing-size pairs in Node and Bun have no greater-than-2× normalized growth signal. Native has 72 such pairs and three depth pairs below clock resolution. This is finite campaign diagnostics, not a universal linear-complexity or throughput proof. The complete benchmark campaign elapsed 597,546.447625 ms (about 597.5 s), close to its 600,000 ms deadline. Host RSS snapshots reached 343,228,416 bytes on Node and 331,808,768 bytes on Bun in this benchmark; these are sampled snapshots, not continuous peak RSS or enforced bounds. Native RSS was unmeasured.
+All 75 increasing-size pairs in Node and Bun have no greater-than-2× normalized growth signal. Native has 71 such pairs and four depth pairs below clock resolution. This is finite campaign diagnostics, not a universal linear-complexity or throughput proof. The complete typed-harness benchmark campaign elapsed 575,961.522834 ms (about 576.0 s) against its 600,000 ms deadline. Host RSS snapshots reached 431,030,272 bytes on Node and 417,431,552 bytes on Bun in this benchmark; these are sampled snapshots, not continuous peaks or enforced bounds. Native benchmark RSS was unmeasured.
 The benchmark's passing native lane demonstrates benchmark-driver execution only; the canonical native report separately establishes the complete local native gate. The strict 64-case replay passed three times after flushing diagnostic markers (`897.4 ms`, `26.7 ms`, `23.2 ms`), with no timeout relaxation, smaller batch substitution or 330-second timeout; the watchdog control remains a separate 5-second deadline check.
-The canonical integrated report [`artifacts/verification.json`](../artifacts/verification.json) passed all six gates and ran from `2026-09-21T08:14:53.445Z` to `2026-09-21T08:23:40.858Z` (527.413 s). Native benchmark success and native verification are distinct evidence: the former is the 465-measurement timing artifact, while the latter is the required 12,458-invocation campaign.
+The canonical required-native integrated report [`artifacts/verification.json`](../artifacts/verification.json) passed all six gates and ran from `2026-09-21T13:04:07.548Z` to `2026-09-21T13:15:00.068Z` (652.520 s). Native benchmark success and native verification are distinct evidence: the former is the 465-measurement timing artifact, while the latter is the required 12,458-invocation campaign.
 
-`artifacts/release-summary.json` is the compact derived canonical report (`SHA-256 23d08c2b58cfe30bd4480b0806df7057fe2fab36b04f7c63de96b782aa36c958`); `artifacts/cleanup.json` records the verified diagnostic archive and retained canonical reports/inputs. Archived diagnostic scripts are historical evidence, not current runnable commands.
+`artifacts/release-summary.json` and `artifacts/cleanup.json` remain historical pre-migration records. The current canonical local evidence is `artifacts/verification.json`, `artifacts/native.json` and `artifacts/bench.json`; generated artifacts are ignored and not represented as checked-in release attachments.
 
 ## CI execution evidence
 
@@ -197,7 +207,7 @@ Immutable action pins:
 - `actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020`
 - `oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6`
 
-Linux used exact noble package `clang-18=1:18.1.3-1ubuntu1` with `CC=/usr/bin/clang-18`; macOS used the selected Apple Clang/image. Private push-triggered run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) verified commit `a3b1a64`: `verify (ubuntu-24.04)` and `verify (macos-15)` both completed successfully. The run retained the no-cache, no-publishing-permissions, no-cluster/GPU and no-warning-suppression boundaries.
+Linux CI selects exact noble package `clang-18=1:18.1.3-1ubuntu1` with `CC=/usr/bin/clang-18`; macOS selects Apple Clang and records the image. Private run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) passed both jobs for pre-migration commit `a3b1a64`. The updated workflow adds frozen dev-tool installation and strict type checking before setup, Gate A and `verify --native=required`; its new run is pending push.
 
 ## Pinned source/evidence table
 
@@ -205,7 +215,7 @@ All source-review entries below are dated 2026-09-19. Source review establishes 
 
 | Claim | Pinned source / issue | Local result or command | Design consequence |
 |---|---|---|---|
-| Tail-safe JS design still matters | [WONTFIX](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/WONTFIX.txt), [#798](https://github.com/bendlang/bend/issues/798), [#802](https://github.com/bendlang/bend/issues/802) | Source says non-tail continuation work unresolved; `node scripts/probe.mjs` passes structural drivers/reversal through 262,144 | Explicit consuming/tail drivers and iterative host comparisons; no generic recursive folds |
+| Tail-safe JS design still matters | [WONTFIX](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/WONTFIX.txt), [#798](https://github.com/bendlang/bend/issues/798), [#802](https://github.com/bendlang/bend/issues/802) | Source says non-tail continuation work unresolved; `node scripts/probe.ts` passes structural drivers/reversal through 262,144 | Explicit consuming/tail drivers and iterative host comparisons; no generic recursive folds |
 | Unbalanced Base Array traps | [WONTFIX](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/WONTFIX.txt), [#808](https://github.com/bendlang/bend/issues/808) | Pinned text describes fail-stop, not repaired balance | JSON Array holds Base List, not arbitrary Base array trees |
 | Native pure-library ABI unavailable | [WONTFIX](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/WONTFIX.txt), [#813](https://github.com/bendlang/bend/issues/813) | Planned/not scheduled; Gate A compiles and executes an IO main | CPU IO consumer rather than invented C library exports/FFI |
 | Binary file additions shipped | [2.0.13 changelog](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/CHANGELOG.md), [#823](https://github.com/bendlang/bend/issues/823) | Source records File.read_at/File.size/File.write_bytes; no byte-API library result claimed | File.size supports the test driver; public bytes remain deferred |

@@ -1,0 +1,20 @@
+{
+  "name": "bend-json",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "node": "26.9.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "setup": "node scripts/setup.ts",
+    "probe": "node scripts/probe.ts",
+    "verify": "node scripts/verify.ts",
+    "bench": "node scripts/bench.ts"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "typescript": "7.0.2"
+  }
+}

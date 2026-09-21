@@ -159,16 +159,16 @@ Each row names a finite runtime evidence obligation, not a universal theorem. Ad
 
 | ID | Domain and assumptions | Evidence entry point | Status |
 |---|---|---|---|
-| JSON-R001 | Complete scalar JSON grammar within corpus limits; all 95 y_ inputs succeed | `tests/conformance.mjs`, `tests/regressions.mjs` | Node/Bun/native canonical campaign passed |
-| JSON-R002 | Syntax/suffix rejection and first-error dispatch, including bounded mutation inputs | `tests/regressions.mjs`, mutation campaign | Combined Node/Bun/native regressions and all mutations passed |
-| JSON-R003 | Exact valid number spelling and standalone lexical/resource validation | `tests/regressions.mjs`, `tests/properties.mjs` | Node/Bun/native passed |
+| JSON-R001 | Complete scalar JSON grammar within corpus limits; all 95 y_ inputs succeed | `tests/conformance.ts`, `tests/regressions.ts` | Node/Bun/native canonical campaign passed |
+| JSON-R002 | Syntax/suffix rejection and first-error dispatch, including bounded mutation inputs | `tests/regressions.ts`, mutation campaign | Combined Node/Bun/native regressions and all mutations passed |
+| JSON-R003 | Exact valid number spelling and standalone lexical/resource validation | `tests/regressions.ts`, `tests/properties.ts` | Node/Bun/native passed |
 | JSON-R004 | Scalar strings, all controls/escapes/pairs, no normalization | regressions and decoded corpus | Node/Bun/native passed |
 | JSON-R005 | Ordered duplicate decoded names and special/numeric-looking keys | regressions and generated ASTs | Node/Bun/native passed |
-| JSON-R006 | Original source codepoint errors, astral/escape/EOF cases | `tests/regressions.mjs` | Node/Bun/native passed |
+| JSON-R006 | Original source codepoint errors, astral/escape/EOF cases | `tests/regressions.ts` | Node/Bun/native passed |
 | JSON-R007 | L−1/L/L+1, zero/cap/cap+1 and per-field resource units | regressions and native replay | Node/Bun/native passed |
 | JSON-R008 | Invalid constructed number/text/key payloads, no partial success | host regressions and native construction | Node/Bun/native passed |
 | JSON-R009 | Exact structural roundtrip for bounded independently generated ASTs | properties and native construction batches | 3,000 generated ASTs per host and native passed |
-| JSON-R010 | Real child-directory/host imports and exact primitive/ADT ABI | `scripts/probe.mjs`, real host examples | Gate A and actual Bend/Node/Bun JSON examples passed |
+| JSON-R010 | Real child-directory/host imports and exact primitive/ADT ABI | `scripts/probe.ts`, real host examples | Gate A and actual Bend/Node/Bun JSON examples passed |
 | JSON-R011 | Strict UTF-8 boundary, BOM retention and all 318 original names | setup manifest/tree and conformance accounting | Node/Bun/native passed: 293 String calls, 25 byte exclusions each; offline integrity controls passed |
 | JSON-R012 | Node/Bun/CPU-native recursive execution, default-size resource tests and measurements | probe, verify, bench | Canonical integrated report passed all six gates; private Ubuntu/macOS CI run `35589618477` passed |
 
@@ -201,4 +201,4 @@ The source/evidence table, exact revisions, commands and runtime statuses are in
 2. **v0.3, only after real use and benchmarks:** measured encoding ergonomics/performance work.
 3. **Later, only with upstream capability and consumers:** bytes, incremental parsing, NDJSON and shared text utilities.
 
-No HTTP/router/TLS/database/schema/JSONPath/derive/package-manager/LSP/framework or GPU-parsing work is part of this release.
+No HTTP/router/TLS/database/schema/JSONPath/derive/LSP/framework or GPU-parsing work is part of this release. Runtime and production-library package dependencies remain forbidden; the locked package-manager scope is limited to the owner-authorized TypeScript compiler and Node declarations used to statically check the host harness.

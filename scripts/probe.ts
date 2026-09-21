@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ROOT, REF, COMPILER, BUN, NODE, run, check, versions, artifacts } from './tools.mjs';
+import { ROOT, COMPILER, BUN, NODE, run, check, versions, artifacts } from './tools.ts';
 
 artifacts();
 const dir = mkdtempSync(resolve(ROOT, 'artifacts/probe-'));
@@ -149,7 +150,7 @@ def native_size(+n: Nat) -> Bool:
 `;
 writeFileSync(resolve(dir, 'probe.bend'), source);
 writeFileSync(resolve(dir, 'child/import.bend'), 'import Base\nimport ../probe.bend as P\ndef imported() -> P.Json:\n  P.value()\n');
-writeFileSync(resolve(dir, 'child/host.mjs'), `import assert from 'node:assert/strict';
+writeFileSync(resolve(dir, 'child/host.ts'), `import assert from 'node:assert/strict';
 import P from '../probe.bend';
 assert.equal(P.bool(),true); assert.equal(P.text(),'é😀'); assert.equal(P.natural(),17n);
 assert.deepEqual(P.list(),{$:'Con',head:1n,tail:{$:'Con',head:2n,tail:{$:'Nil'}}});
@@ -213,20 +214,28 @@ def main() -> IO(Unit):
 console.log(JSON.stringify(versions()));
 check(resolve(dir, 'probe.bend'));
 check(resolve(dir, 'child/import.bend'));
-const results = [];
-for (const [runtime,args] of [[BUN,['--no-install','--preload',COMPILER]], [NODE,['--import',COMPILER]]]) {
-  const result = run(runtime, [...args, resolve(dir,'child/host.mjs')]);
-  process.stdout.write(result.stdout); process.stderr.write(result.stderr);
-  results.push({runtime,stdout:result.stdout,stderr:result.stderr});
+const results: Array<{ runtime: string; stdout: string; stderr: string }> = [];
+const runtimes: Array<[string, string[]]> = [
+  [BUN, ['--no-install', '--preload', COMPILER]],
+  [NODE, ['--import', COMPILER]],
+];
+for (const [runtime, args] of runtimes) {
+  const result = run(runtime, [...args, resolve(dir, 'child/host.ts')]);
+  process.stdout.write(result.stdout);
+  process.stderr.write(result.stderr);
+  results.push({ runtime, stdout: result.stdout, stderr: result.stderr });
 }
-const cc = process.env.CC || '/usr/bin/clang';
+const cc = process.env['CC'] || '/usr/bin/clang';
 const detected = spawnSync(cc, ['--version'], {
   cwd: ROOT, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024,
 });
-let compiler = null;
-let built = null;
-let native = { status: 'unverified', reason: `Optional local Clang not found: ${cc}` };
-if (detected.error?.code === 'ENOENT' && !process.env.CC) {
+let compiler: string | null = null;
+let built: SpawnSyncReturns<string> | null = null;
+let native: SpawnSyncReturns<string> | { status: 'unverified'; reason: string } = {
+  status: 'unverified',
+  reason: `Optional local Clang not found: ${cc}`,
+};
+if ((detected.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT' && !process.env['CC']) {
   console.log(native.reason);
 } else {
   if (detected.error || detected.signal || detected.status !== 0) {

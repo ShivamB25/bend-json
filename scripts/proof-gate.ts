@@ -1,30 +1,66 @@
 import { spawnSync } from 'node:child_process';
+import type { SpawnSyncReturns } from 'node:child_process';
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ROOT, COMPILER, BUN, ENV, check, artifacts } from './tools.mjs';
+import { ROOT, COMPILER, BUN, ENV, check, artifacts } from './tools.ts';
+
+// This is a review boundary, not a security boundary against simultaneous edits
+// to the laws, SPEC, and this baseline. Contract changes require explicit review.
+type BaselinePair = readonly [id: string, name: string];
+type ReleaseFile = 'SPEC.md' | 'json.bend' | 'LAWS.bend' | 'PROOF.bend';
+type DeclarationKind = 'law' | 'def';
+type CompilerExpectation = 'safe' | 'unsafe' | 'missing-import' | 'incomplete' | 'equality-mismatch';
+type FixtureFiles = Record<string, string>;
+interface LawRow {
+  id: string;
+  name: string;
+  domain: string;
+}
+interface GateError extends Error {
+  category: string;
+  result?: unknown;
+  reports?: unknown[];
+  directory?: string;
+}
+interface ProcessLike {
+  status?: number | null;
+  signal?: NodeJS.Signals | null;
+  error?: NodeJS.ErrnoException;
+  timedOut?: boolean;
+  timeout?: boolean;
+  stdout?: unknown;
+  stderr?: unknown;
+}
+export interface InventoryReport {
+  root: string;
+  files: ReleaseFile[];
+  laws: LawRow[];
+  directImport: true;
+  noMain: true;
+}
 
 // This is a review boundary, not a security boundary against simultaneous edits
 // to the laws, SPEC, and this baseline. Contract changes require explicit review.
 const BASELINE = Object.freeze([
-  Object.freeze(['JSON-P001', 'Json.bool_roundtrip']),
-  Object.freeze(['JSON-P002', 'Json.null_roundtrip']),
-  Object.freeze(['JSON-P003', 'Json.empty_array_roundtrip']),
-  Object.freeze(['JSON-P004', 'Json.empty_object_roundtrip']),
-  Object.freeze(['JSON-P005', 'Json.string_reverse_accumulator']),
-]);
-const FILES = Object.freeze(['SPEC.md', 'json.bend', 'LAWS.bend', 'PROOF.bend']);
+  ['JSON-P001', 'Json.bool_roundtrip'],
+  ['JSON-P002', 'Json.null_roundtrip'],
+  ['JSON-P003', 'Json.empty_array_roundtrip'],
+  ['JSON-P004', 'Json.empty_object_roundtrip'],
+  ['JSON-P005', 'Json.string_reverse_accumulator'],
+] as const satisfies readonly BaselinePair[]);
+const FILES: readonly ReleaseFile[] = Object.freeze(['SPEC.md', 'json.bend', 'LAWS.bend', 'PROOF.bend']);
 const TIMEOUT = 30_000;
 const MAX_BUFFER = 1024 * 1024;
-const normalize = text => text.replaceAll('\r\n', '\n');
+const normalize = (text: string): string => text.replaceAll('\r\n', '\n');
 const NAME = '[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*';
 
-function fail(category, message, details = {}) {
-  const error = new Error(`${category}: ${message}`);
+function fail(category: string, message: string, details: Record<string, unknown> = {}): never {
+  const error = new Error(`${category}: ${message}`) as GateError;
   Object.assign(error, { category, ...details });
   throw error;
 }
 
-function diagnostic(result) {
+function diagnostic(result: ProcessLike) {
   return {
     status: result.status ?? null,
     signal: result.signal ?? null,
@@ -35,7 +71,7 @@ function diagnostic(result) {
       errno: result.error.errno ?? null,
       syscall: result.error.syscall ?? null,
       path: result.error.path ?? null,
-      spawnargs: result.error.spawnargs ?? null,
+      spawnargs: (result.error as NodeJS.ErrnoException & { spawnargs?: readonly string[] }).spawnargs ?? null,
       stack: result.error.stack ?? null,
     },
     timedOut: result.timedOut === true || result.timeout === true || result.error?.code === 'ETIMEDOUT',
@@ -44,7 +80,7 @@ function diagnostic(result) {
   };
 }
 
-export function strictVerdict(result, label) {
+export function strictVerdict(result: ProcessLike, label: string) {
   const evidence = diagnostic(result);
   if (evidence.error || evidence.signal || evidence.timedOut || evidence.status !== 0) {
     fail('checker-process', `${label}: checker did not exit cleanly`, { result: evidence });
@@ -59,31 +95,33 @@ export function strictVerdict(result, label) {
 // Anchored recognition of canonical declaration lines, not a Bend parser.
 // A comment-only line never contributes a declaration; comments after a header
 // are ignored. Bodies, including strings containing '#', are not interpreted.
-function declarationLines(source) {
+function declarationLines(source: string): string[] {
   return normalize(source).split('\n').map(line => line.replace(/#.*$/, '').trimEnd());
 }
 
-function declarations(source, kind, file) {
+function declarations(source: string, kind: DeclarationKind, file: string): string[] {
   const pattern = kind === 'law'
     ? new RegExp(`^law (${NAME}):$`)
     : new RegExp(`^def (${NAME})\\(`);
-  const names = [];
+  const names: string[] = [];
   const candidate = new RegExp(`^(?:[ \\t]*|[ \\t]*@unsafe[ \\t]+)${kind}(?:[ \\t]|$)`);
   for (const line of declarationLines(source)) {
     if (!candidate.test(line)) continue;
     const match = pattern.exec(line);
     if (!match) fail('inventory-declaration', `${file}: noncanonical ${kind} declaration ${line}`);
-    if (names.includes(match[1])) fail('inventory-duplicate', `${file}: duplicate ${kind} ${match[1]}`);
-    names.push(match[1]);
+    const name = match[1];
+    if (name === undefined) fail('inventory-declaration', `${file}: missing ${kind} name`);
+    if (names.includes(name)) fail('inventory-duplicate', `${file}: duplicate ${kind} ${name}`);
+    names.push(name);
   }
   return names;
 }
 
-function tableRows(source) {
+function tableRows(source: string): LawRow[] {
   // Examples and HTML comments are not formal table entries.
   const visible = normalize(source).replace(/<!--[\s\S]*?-->/g, '');
-  const lines = [];
-  let fence = null;
+  const lines: string[] = [];
+  let fence: string | null = null;
   for (const line of visible.split('\n')) {
     const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
     if (marker) {
@@ -97,25 +135,32 @@ function tableRows(source) {
   const headers = lines.flatMap((line, index) => heading.test(line) ? [index] : []);
   if (headers.length !== 1) fail('inventory-table', 'SPEC.md must contain exactly one formal law table');
   const start = headers[0];
+  if (start === undefined) fail('inventory-table', 'SPEC.md formal table header is missing');
   if (!/^\|\s*:?-{3,}:?\s*\|\s*:?-{3,}:?\s*\|\s*:?-{3,}:?\s*\|\s*$/.test(lines[start + 1] ?? '')) {
     fail('inventory-table', 'SPEC.md formal table separator is missing');
   }
-  const rows = [];
+  const rows: LawRow[] = [];
   let end = start + 2;
   const row = new RegExp(`^\\|\\s*(JSON-P[0-9]{3})\\s*\\|\\s*(${NAME})\\s*\\|\\s*([^|]+)\\|\\s*$`);
-  while (end < lines.length && lines[end].startsWith('|')) {
-    const match = row.exec(lines[end]);
-    if (!match || !match[3].trim()) fail('inventory-table', `Malformed formal row: ${lines[end]}`);
-    rows.push({ id: match[1], name: match[2], domain: match[3].trim() });
+  while (end < lines.length && lines[end]?.startsWith('|')) {
+    const sourceLine = lines[end];
+    if (sourceLine === undefined) fail('inventory-table', 'SPEC.md table ended unexpectedly');
+    const match = row.exec(sourceLine);
+    const id = match?.[1];
+    const name = match?.[2];
+    const domain = match?.[3]?.trim();
+    if (!id || !name || !domain) fail('inventory-table', `Malformed formal row: ${sourceLine}`);
+    rows.push({ id, name, domain });
     end++;
   }
   for (let index = 0; index < lines.length; index++) {
     if (index >= start && index < end) continue;
-    if (/^\|\s*JSON-P[0-9]+\s*\|/.test(lines[index])) {
+    const line = lines[index];
+    if (line !== undefined && /^\|\s*JSON-P[0-9]+\s*\|/.test(line)) {
       fail('inventory-table', 'Formal law rows must occur only in the one formal table');
     }
   }
-  for (const key of ['id', 'name']) {
+  for (const key of ['id', 'name'] as const) {
     if (new Set(rows.map(item => item[key])).size !== rows.length) {
       fail('inventory-duplicate', `SPEC.md contains duplicate law ${key}s`);
     }
@@ -123,15 +168,15 @@ function tableRows(source) {
   return rows;
 }
 
-function inventoryAt(root, required) {
-  const sources = {};
+function inventoryAt(root: string, required: readonly BaselinePair[]): InventoryReport {
+  const sources = {} as Record<ReleaseFile, string>;
   for (const file of FILES) {
     const path = resolve(root, file);
     try {
       if (!lstatSync(path).isFile()) fail('inventory-file', `${file} must be a regular file`);
       sources[file] = readFileSync(path, 'utf8');
     } catch (error) {
-      if (error.category) throw error;
+      if (error instanceof Error && 'category' in error) throw error;
       fail('inventory-file', `${file} is unreadable or missing`, { cause: error });
     }
   }
@@ -164,19 +209,20 @@ function inventoryAt(root, required) {
   return { root: resolve(root), files: [...FILES], laws: rows, directImport: true, noMain: true };
 }
 
-export function inventory(root = ROOT) {
+export function inventory(root = ROOT): InventoryReport {
   return inventoryAt(root, BASELINE);
 }
 
-export function proofChecks() {
-  const reports = [{ label: 'release-inventory', category: 'inventory', ...inventory() }];
+export function proofChecks(): unknown[] {
+  const reports: unknown[] = [{ label: 'release-inventory', category: 'inventory', ...inventory() }];
   // tools.check uses the pinned compiler, 30-second timeout, and 1 MiB cap.
   // LAWS alone intentionally has open claims: check it through PROOF instead.
   for (const file of ['json.bend', 'PROOF.bend']) {
     try {
       reports.push(strictVerdict(check(resolve(ROOT, file)), file));
     } catch (error) {
-      error.reports = reports;
+      if (!(error instanceof Error)) throw error;
+      (error as GateError).reports = reports;
       throw error;
     }
   }
@@ -184,23 +230,33 @@ export function proofChecks() {
 }
 
 // Unlike tools.run/check, controls must retain unsuccessful subprocess results.
-function checker(file, cwd) {
+function checker(file: string, cwd: string): SpawnSyncReturns<string> {
   return spawnSync(BUN, ['--no-install', COMPILER, file], {
     cwd, env: ENV, encoding: 'utf8', timeout: TIMEOUT, maxBuffer: MAX_BUFFER,
   });
 }
 
-function expectedRejection(action, category, label) {
+function expectedRejection(
+  action: () => unknown,
+  category: string,
+  label: string,
+): { category: string; message: string; result?: unknown } {
   try {
     action();
   } catch (error) {
-    if (error.category !== category) throw error;
-    return { category: error.category, message: error.message, ...(error.result ? { result: error.result } : {}) };
+    if (!(error instanceof Error) || !('category' in error)) throw error;
+    const gateError = error as GateError;
+    if (gateError.category !== category) throw error;
+    return {
+      category: gateError.category,
+      message: gateError.message,
+      ...(gateError.result === undefined ? {} : { result: gateError.result }),
+    };
   }
   fail('selftest-unexpected-accept', `${label}: expected ${category}`);
 }
 
-function compilerControl(dir, expected) {
+function compilerControl(dir: string, expected: CompilerExpectation) {
   const label = dir.slice(dir.lastIndexOf('/') + 1);
   const result = checker(resolve(dir, 'PROOF.bend'), dir);
   if (expected === 'safe') return strictVerdict(result, label);
@@ -222,7 +278,7 @@ function compilerControl(dir, expected) {
     } else if (expected === 'equality-mismatch') {
       // Check the unequal Nat sides, not the compiler's namespace/location rendering.
       // Syntax errors and type-shape failures do not have this check-rfl diagnostic.
-      matched &&= /^Error:\n- expected : 0n\n- observed : 1n\n/.test(stderr);
+      matched &&= typeof stderr === 'string' && /^Error:\n- expected : 0n\n- observed : 1n\n/.test(stderr);
     } else {
       fail('selftest-category', `Unknown expected diagnostic ${expected}`);
     }
@@ -231,7 +287,7 @@ function compilerControl(dir, expected) {
   return { label, category: expected, rejection, ...evidence };
 }
 
-function fixtureFiles(pairs) {
+function fixtureFiles(pairs: readonly BaselinePair[]): FixtureFiles {
   return {
     'SPEC.md': '| ID | Law | Domain/category |\n|---|---|---|\n'
       + pairs.map(([id, name]) => `| ${id} | ${name} | Enforcement fixture only |\n`).join(''),
@@ -242,37 +298,37 @@ function fixtureFiles(pairs) {
   };
 }
 
-function writeFixture(parent, name, files) {
+function writeFixture(parent: string, name: string, files: FixtureFiles): string {
   const dir = resolve(parent, name);
   mkdirSync(dir);
   for (const [file, source] of Object.entries(files)) writeFileSync(resolve(dir, file), source, { flag: 'wx' });
   return dir;
 }
 
-export function proofSelftest() {
+export function proofSelftest(): unknown[] {
   artifacts();
   const temp = mkdtempSync(resolve(ROOT, 'artifacts/proof-selftest-'));
-  const reports = [];
-  const tinyPairs = [['JSON-P001', 'Control.identity']];
+  const reports: unknown[] = [];
+  const tinyPairs: readonly BaselinePair[] = [['JSON-P001', 'Control.identity']];
   const tiny = fixtureFiles(tinyPairs);
   try {
     const positive = writeFixture(temp, 'valid', tiny);
     reports.push({ label: 'valid-inventory', category: 'inventory', ...inventoryAt(positive, tinyPairs) });
     reports.push(compilerControl(positive, 'safe'));
 
-    const cases = [
+    const cases: ReadonlyArray<readonly [string, FixtureFiles, CompilerExpectation, string?]> = [
       ['missing-import', { ...tiny, 'PROOF.bend': 'import Base\ndef harmless() -> Nat:\n  0n\n' }, 'missing-import', 'inventory-import'],
       ['unfilled-law', { ...tiny, 'PROOF.bend': 'import Base\nimport ./LAWS.bend as Laws\ndef harmless() -> Nat:\n  0n\n' }, 'incomplete', 'inventory-proof'],
-      ['explicit-todo', { ...tiny, 'PROOF.bend': tiny['PROOF.bend'].replace('{==}', '?TODO') }, 'incomplete'],
-      ['false-equality', { ...tiny, 'LAWS.bend': tiny['LAWS.bend'].replace('0n == 0n', '0n == 1n') }, 'equality-mismatch'],
+      ['explicit-todo', { ...tiny, 'PROOF.bend': tiny['PROOF.bend']!.replace('{==}', '?TODO') }, 'incomplete'],
+      ['false-equality', { ...tiny, 'LAWS.bend': tiny['LAWS.bend']!.replace('0n == 0n', '0n == 1n') }, 'equality-mismatch'],
       ['explicit-unsafe', {
         ...tiny,
-        'PROOF.bend': tiny['PROOF.bend'].replace('import Base\n', 'import Base\nimport ./unsafe.bend as Unsafe\n'),
+        'PROOF.bend': tiny['PROOF.bend']!.replace('import Base\n', 'import Base\nimport ./unsafe.bend as Unsafe\n'),
         'unsafe.bend': 'import Base\n@unsafe\ndef harmless() -> Nat:\n  0n\n',
       }, 'unsafe'],
       ['template-unsafe', {
         ...tiny,
-        'PROOF.bend': tiny['PROOF.bend'].replace('import Base\n', 'import Base\nimport ./template.bend as Template\n'),
+        'PROOF.bend': tiny['PROOF.bend']!.replace('import Base\n', 'import Base\nimport ./template.bend as Template\n'),
         'template.bend': 'import Base\ndef mapped() -> List<Nat>:\n  List.map(~Nat,~Nat,~(x=>x),[0n])\n',
       }, 'unsafe'],
     ];
@@ -302,11 +358,11 @@ export function proofSelftest() {
       const law = `law ${name}:\n  {0n == 0n : Nat}\n`;
       const proof = `def Laws.${name}():\n  {==}\n`;
       const row = `| ${id} | ${name} | Enforcement fixture only |\n`;
-      for (const kind of ['law', 'proof', 'law-and-proof', 'row']) {
+      for (const kind of ['law', 'proof', 'law-and-proof', 'row'] as const) {
         const files = { ...full };
-        if (kind === 'law' || kind === 'law-and-proof') files['LAWS.bend'] = files['LAWS.bend'].replace(law, '');
-        if (kind === 'proof' || kind === 'law-and-proof') files['PROOF.bend'] = files['PROOF.bend'].replace(proof, '');
-        if (kind === 'row') files['SPEC.md'] = files['SPEC.md'].replace(row, '');
+        if (kind === 'law' || kind === 'law-and-proof') files['LAWS.bend'] = files['LAWS.bend']!.replace(law, '');
+        if (kind === 'proof' || kind === 'law-and-proof') files['PROOF.bend'] = files['PROOF.bend']!.replace(proof, '');
+        if (kind === 'row') files['SPEC.md'] = files['SPEC.md']!.replace(row, '');
         const label = `missing-${kind}-${id}`;
         const dir = writeFixture(temp, label, files);
         const category = kind === 'row' ? 'inventory-baseline' : kind === 'proof' ? 'inventory-proof' : 'inventory-law';
@@ -319,9 +375,11 @@ export function proofSelftest() {
     rmSync(temp, { recursive: true });
     return reports;
   } catch (error) {
-    error.directory = temp;
-    error.reports = reports;
-    error.message += `\nProof self-test artifacts retained at ${temp}`;
-    throw error;
+    if (!(error instanceof Error)) throw error;
+    const gateError = error as GateError;
+    gateError.directory = temp;
+    gateError.reports = reports;
+    gateError.message += `\nProof self-test artifacts retained at ${temp}`;
+    throw gateError;
   }
 }

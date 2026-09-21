@@ -1,98 +1,314 @@
 import assert from 'node:assert/strict';
-import {appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
-import {delimiter, resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {ROOT, REF, COMPILER, BUN, NODE, ENV, versions, artifacts} from './tools.mjs';
-import {limits, parseCodes, encodeCodes, encodeExpected, measure, strictDecode} from '../tests/support.mjs';
-import {textCases, numberCases, encoderCases} from '../tests/regressions.mjs';
-import {corpusEntries} from '../tests/conformance.mjs';
-import {generated, commonGenerated, whitespace, escapedScalars, largeFixtures} from '../tests/properties.mjs';
-import {mutationFixtures, commonScalar, retainMutationFailure} from '../tests/mutations.mjs';
-import {limitFields, invalidScalars, constructionSource, controlsSource} from './native-source.mjs';
-import {rss} from './verify.mjs';
-import {nativeProcess} from './native-process.mjs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { delimiter, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ROOT, REF, COMPILER, BUN, NODE, ENV, versions, artifacts } from './tools.ts';
+import type { Versions } from './tools.ts';
+import {
+  limits,
+  parseCodes,
+  encodeCodes,
+  encodeExpected,
+  measure,
+  strictDecode,
+} from '../tests/support.ts';
+import type {
+  Expectation,
+  JsonErrorCode,
+  LimitField,
+  Limits,
+  ParseCode,
+  TextFixture,
+} from '../tests/support.ts';
+import { textCases, numberCases, encoderCases } from '../tests/regressions.ts';
+import { corpusEntries } from '../tests/conformance.ts';
+import type { CorpusEntry } from '../tests/conformance.ts';
+import { generated, commonGenerated, whitespace, escapedScalars, largeFixtures } from '../tests/properties.ts';
+import type { GeneratedFixture } from '../tests/properties.ts';
+import { mutationFixtures, commonScalar, retainMutationFailure } from '../tests/mutations.ts';
+import type { MutationFixture, MutationKind } from '../tests/mutations.ts';
+import { limitFields, invalidScalars, constructionSource, controlsSource } from './native-source.ts';
+import type { ConstructionItem } from './native-source.ts';
+import { rss } from './verify.ts';
+import { nativeProcess } from './native-process.ts';
+import type { DescribedError, NativeProcessResult } from './native-process.ts';
 
-const sha256 = value => createHash('sha256').update(value).digest('hex');
-const json = value => JSON.stringify(value, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2) + '\n';
-const errorRecord = error => error ? {name:error.name, message:error.message || String(error), code:error.code, stack:error.stack} : null;
+type NativeSuccessKind = 'parse-done' | 'done' | 'number-done';
+type NativeFailureKind = 'parse-fail' | 'encode-fail';
+type NativeProtocol =
+  | { kind: 'parse-done' }
+  | { kind: 'done' | 'number-done'; text: string }
+  | { kind: NativeFailureKind; code: JsonErrorCode; offset: bigint };
+type CoveragePhase =
+  | 'directedText'
+  | 'malformedParse'
+  | 'directedEncode'
+  | 'directedEncodeShared'
+  | 'directedEncodeNative'
+  | 'number'
+  | 'defaultDepth';
+type GeneratedCoverageField = 'generatedText' | 'generatedWhitespace' | 'generatedEscapes';
+interface NativeError extends Error {
+  category?: string;
+  nativeResult?: NativeProcessResult;
+  report?: unknown;
+}
+interface NativeInputFixture {
+  id: string;
+  text: string;
+  limits: Limits;
+}
+interface EncodedFixture extends NativeInputFixture {
+  value: GeneratedFixture['value'];
+}
+interface NativeCorpusEntryReport {
+  id: string;
+  name: string;
+  class: CorpusEntry['class'];
+  expected: CorpusEntry['expected'];
+  status: string;
+  code?: JsonErrorCode;
+  offset?: bigint;
+  category?: string;
+  roundtrip?: 'pass';
+  verdict?: 'pass' | 'fail';
+  error?: DescribedError | null;
+}
+interface NativeMutationReport {
+  seed: string;
+  deadlineMs: number;
+  caseTimeoutMs: number;
+  counts: Record<MutationKind, number>;
+  results: Array<Record<string, unknown>>;
+  failure?: Record<string, unknown>;
+  elapsedMs?: number;
+}
+interface NativeReport {
+  backend: 'native';
+  status: 'running' | 'pass' | 'fail' | 'unverified';
+  required: boolean;
+  artifacts: string;
+  events: string;
+  invocations: number;
+  builds: number;
+  concurrency: {
+    textInvocations: number;
+    constructionPipelines: number;
+    mutations: number;
+    overlappingPhases: false;
+    nativeThreadsPerChild: 1;
+    gpu: 'off';
+  };
+  compiler: {
+    command: string | null;
+    probes: NativeProcessResult[];
+    version?: string;
+    absent?: true;
+  } | null;
+  versions: Versions | null;
+  corpus: {
+    inventory: number;
+    decoded: number;
+    byteExcluded: number;
+    attempted: number;
+    accepted: number;
+    rejected: number;
+    rejectionCategories: Record<string, number>;
+    entries: NativeCorpusEntryReport[];
+  };
+  coverage: {
+    directedText: number;
+    generatedText: number;
+    generatedWhitespace: number;
+    generatedEscapes: number;
+    commonDomain: number;
+    mutations: number;
+    large: number;
+    defaultDepth: number;
+  };
+  coverageIds: Record<CoveragePhase, string[]>;
+  construction: {
+    generated: number;
+    batches: number;
+    directedEncode: number;
+    number: number;
+    malformedParse: number;
+    scalarBoundaries: unknown[];
+  };
+  memory: {
+    status: 'unverified' | 'sampled';
+    method: string;
+    limitBytes: number;
+    intervalMs: number;
+    invocations: number;
+    sampledInvocations: number;
+    unobservedInvocations: number;
+    samples: number;
+    maximumSampledRssBytes: number;
+    exceeded: boolean;
+    reason: string;
+    control?: Record<string, unknown>;
+  };
+  effectBoundary: { close: string };
+  compilerSource?: { root: string; entry: string };
+  reason?: string;
+  byteControls?: { invalid: number; mutated: number; bomPreserved: true };
+  driverControls?: Array<{ id: string; status: number | null; stderr: string }>;
+  comparatorControls?: string[];
+  mutations?: NativeMutationReport;
+  error?: DescribedError | null;
+}
+
+const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
+const json = (value: unknown): string => JSON.stringify(
+  value,
+  (_key: string, item: unknown) => typeof item === 'bigint' ? item.toString() : item,
+  2,
+) + '\n';
+const errorRecord = (error: unknown): DescribedError | null => {
+  if (error === null || error === undefined) return null;
+  if (!(error instanceof Error)) return { name: 'Error', message: String(error) };
+  const code = (error as NodeJS.ErrnoException).code;
+  return {
+    name: error.name,
+    message: error.message || String(error),
+    ...(code === undefined ? {} : { code }),
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+  };
+};
+const asNativeError = (error: unknown): NativeError => (
+  error instanceof Error ? error as NativeError : new Error(String(error))
+);
 
 // Exercise the same sampler/kill/reap path with a small control-only budget.
 // Allocation size is not a residency claim; only observed RSS satisfies this control.
-export async function nativeMemorySelftest({limitBytes = 64 * 1024 * 1024, allocationBytes = 128 * 1024 * 1024, intervalMs = 25} = {}) {
+export async function nativeMemorySelftest({
+  limitBytes = 64 * 1024 * 1024,
+  allocationBytes = 128 * 1024 * 1024,
+  intervalMs = 25,
+}: {
+  limitBytes?: number;
+  allocationBytes?: number;
+  intervalMs?: number;
+} = {}) {
   assert.ok(Number.isSafeInteger(limitBytes) && limitBytes > 0);
   assert.ok(Number.isSafeInteger(allocationBytes) && allocationBytes > limitBytes);
   assert.ok(Number.isSafeInteger(intervalMs) && intervalMs > 0 && intervalMs <= 250);
-  let available;
-  try { available = rss(process.pid); } catch (error) {
-    return {status:'unverified',controlBudgetBytes:limitBytes,reason:'Platform RSS sampler is unavailable',error:errorRecord(error)};
-  }
-  if (!Number.isSafeInteger(available) || available <= 0) return {status:'unverified',controlBudgetBytes:limitBytes,reason:'Platform RSS sampler yielded no reliable resident-byte measurement'};
-  const source = `globalThis.retained = Buffer.allocUnsafe(${allocationBytes}); require("node:crypto").randomFillSync(globalThis.retained); process.stdout.write("ALLOCATED\\n"); setTimeout(() => { process.stdout.write(String(globalThis.retained[0])+"\\n"); }, 1000);`;
-  const result = await nativeProcess(NODE,['-e',source],{timeout:5000,maxBuffer:1024*1024,memory:{read:rss,limitBytes,intervalMs}});
+  let available: number | undefined;
   try {
-    assert.equal(result.error,null); assert.equal(result.timedOut,false); assert.equal(result.overflow,false); assert.equal(result.killError,null);
-    assert.equal(result.stderr,'');
-    assert.equal(result.memory.exceeded,true,'RSS negative control was not rejected by the memory ceiling');
-    assert.ok(result.memory.samples > 0 && result.memory.maximumSampledRssBytes > limitBytes);
-    assert.equal(result.signal,'SIGKILL','RSS ceiling must terminate and reap the child');
-    assert.equal(result.status,null);
+    available = rss(process.pid);
   } catch (error) {
-    error.nativeResult = result;
-    error.report = {status:'fail',controlBudgetBytes:limitBytes,allocationBytes,intervalMs,result};
-    throw error;
+    return { status: 'unverified', controlBudgetBytes: limitBytes, reason: 'Platform RSS sampler is unavailable', error: errorRecord(error) };
   }
-  return {status:'pass',controlBudgetBytes:limitBytes,allocationBytes,intervalMs,result};
+  if (available === undefined || !Number.isSafeInteger(available) || available <= 0) {
+    return { status: 'unverified', controlBudgetBytes: limitBytes, reason: 'Platform RSS sampler yielded no reliable resident-byte measurement' };
+  }
+  const source = `globalThis.retained = Buffer.allocUnsafe(${allocationBytes}); require("node:crypto").randomFillSync(globalThis.retained); process.stdout.write("ALLOCATED\\n"); setTimeout(() => { process.stdout.write(String(globalThis.retained[0])+"\\n"); }, 1000);`;
+  const result = await nativeProcess(NODE, ['-e', source], {
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+    memory: { read: rss, limitBytes, intervalMs },
+  });
+  try {
+    assert.equal(result.error, null);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.overflow, false);
+    assert.equal(result.killError, null);
+    assert.equal(result.stderr, '');
+    assert.equal(result.memory.exceeded, true, 'RSS negative control was not rejected by the memory ceiling');
+    assert.ok(result.memory.samples > 0 && result.memory.maximumSampledRssBytes > limitBytes);
+    assert.equal(result.signal, 'SIGKILL', 'RSS ceiling must terminate and reap the child');
+    assert.equal(result.status, null);
+  } catch (error) {
+    const failure = asNativeError(error);
+    failure.nativeResult = result;
+    failure.report = { status: 'fail', controlBudgetBytes: limitBytes, allocationBytes, intervalMs, result };
+    throw failure;
+  }
+  return { status: 'pass', controlBudgetBytes: limitBytes, allocationBytes, intervalMs, result };
 }
 
 // No replacement decoding, including subprocess protocol bytes. Invalid UTF-16
 // cannot be written to a UTF-8 file: those cases use explicit native constructors.
-function inputBytes(text, original) {
-  const bytes = original || Buffer.from(text, 'utf8');
+function inputBytes(text: string, original?: Uint8Array): Buffer {
+  const bytes = original === undefined ? Buffer.from(text, 'utf8') : Buffer.from(original);
   assert.equal(strictDecode(bytes), text, 'Native file boundary changed input/BOM or replaced an invalid scalar');
   return bytes;
 }
 
-function protocol(line) {
-  if (line === 'PARSE_DONE') return {kind:'parse-done'};
-  for (const [prefix, kind] of [['DONE\t','done'], ['NUMBER_DONE\t','number-done']]) {
+function protocol(line: string): NativeProtocol {
+  if (line === 'PARSE_DONE') return { kind: 'parse-done' };
+  const successes: ReadonlyArray<readonly [string, 'done' | 'number-done']> = [
+    ['DONE\t', 'done'],
+    ['NUMBER_DONE\t', 'number-done'],
+  ];
+  for (const [prefix, kind] of successes) {
     if (line.startsWith(prefix)) {
       const text = line.slice(prefix.length);
       assert.ok(text.length > 0 && !/[\x00-\x1f]/.test(text), 'Malformed native successful text envelope');
-      return {kind, text};
+      return { kind, text };
     }
   }
   const match = /^(PARSE_FAIL|ENCODE_FAIL)\t([A-Za-z]+)\t(0|[1-9][0-9]*)$/.exec(line);
-  assert.ok(match, `Unknown native protocol: ${JSON.stringify(line)}`);
-  const codes = match[1] === 'PARSE_FAIL' ? parseCodes : encodeCodes;
-  assert.ok(codes.has(match[2]), `Unknown native error constructor ${match[2]}`);
-  const offset = BigInt(match[3]);
+  const phase = match?.[1];
+  const code = match?.[2];
+  const offsetText = match?.[3];
+  assert.ok((phase === 'PARSE_FAIL' || phase === 'ENCODE_FAIL') && code !== undefined && offsetText !== undefined,
+    `Unknown native protocol: ${JSON.stringify(line)}`);
+  const codes: Readonly<Partial<Record<JsonErrorCode, true>>> = phase === 'PARSE_FAIL'
+    ? parseCodes
+    : encodeCodes;
+  assert.ok(Object.hasOwn(codes, code), `Unknown native error constructor ${code}`);
+  const offset = BigInt(offsetText);
   assert.ok(offset <= 16777217n, 'Native error offset outside contract');
-  return {kind:match[1] === 'PARSE_FAIL' ? 'parse-fail' : 'encode-fail', code:match[2], offset};
+  return {
+    kind: phase === 'PARSE_FAIL' ? 'parse-fail' : 'encode-fail',
+    code: code as JsonErrorCode,
+    offset,
+  };
 }
 
-function resultLine(stdout) {
+function resultLine(stdout: string): NativeProtocol {
   assert.ok(stdout.endsWith('\n'), 'Native response lacks terminal newline');
   const line = stdout.slice(0, -1);
   assert.ok(!line.includes('\n') && !line.includes('\r'), 'Native driver emitted multiple lines or CR');
   return protocol(line);
 }
 
-function expectResult(result, expect, success = 'done') {
+function expectResult(
+  result: NativeProtocol,
+  expect: Expectation,
+  success: NativeSuccessKind | 'encode' = 'done',
+): void {
   if (expect.kind === 'fail') {
-    assert.equal(result.kind, success === 'encode' ? 'encode-fail' : 'parse-fail', 'Wrong native rejection phase');
+    const expectedKind: NativeFailureKind = success === 'encode' ? 'encode-fail' : 'parse-fail';
+    assert.equal(result.kind, expectedKind, 'Wrong native rejection phase');
+    if (result.kind !== 'parse-fail' && result.kind !== 'encode-fail') return;
     if (expect.code !== undefined) assert.equal(result.code, expect.code);
     if (expect.offset !== undefined) assert.equal(result.offset, BigInt(expect.offset));
     return;
   }
-  assert.equal(result.kind, success === 'encode' ? 'done' : success);
+  const expectedKind: NativeSuccessKind = success === 'encode' ? 'done' : success;
+  assert.equal(result.kind, expectedKind);
   const expected = expect.text ?? expect.encoded;
-  if (expected !== undefined) assert.equal(result.text, expected);
+  if (expected !== undefined) {
+    assert.ok(result.kind === 'done' || result.kind === 'number-done');
+    assert.equal(result.text, expected);
+  }
 }
 
-function fixtureFits(item) {
+function fixtureFits(item: EncodedFixture): void {
   const measured = measure(item.value);
-  for (const [field, count] of [['max_depth',measured.depth],['max_number',measured.number],['max_string',measured.string],['max_values',measured.values],['max_output',measured.output],['max_input',[...item.text].length]]) {
+  const counts: ReadonlyArray<readonly [LimitField, number]> = [
+    ['max_depth', measured.depth],
+    ['max_number', measured.number],
+    ['max_string', measured.string],
+    ['max_values', measured.values],
+    ['max_output', measured.output],
+    ['max_input', [...item.text].length],
+  ];
+  for (const [field, count] of counts) {
     assert.ok(BigInt(count) <= item.limits[field], `${item.id}: generated ${field} overflow`);
   }
   assert.equal(item.text, measured.text, `${item.id}: fixture's independent encoding drifted`);
@@ -100,42 +316,50 @@ function fixtureFits(item) {
 
 // Stop assigning work on the first failure, but reap every in-flight child
 // before returning that failure. Fixture iteration and IDs remain deterministic.
-async function bounded(items, width, work) {
+async function bounded<T>(
+  items: Iterable<T>,
+  width: number,
+  work: (item: T) => void | Promise<void>,
+): Promise<void> {
   const iterator = items[Symbol.iterator]();
-  let failure;
-  await Promise.all(Array.from({length:width},async () => {
-    while (!failure) {
+  let failed = false;
+  let failure: unknown;
+  await Promise.all(Array.from({ length: width }, async () => {
+    while (!failed) {
       try {
         const next = iterator.next();
         if (next.done) return;
         await work(next.value);
-      } catch (error) { failure ||= {error}; }
+      } catch (error) {
+        failed = true;
+        failure = error;
+      }
     }
   }));
-  if (failure) throw failure.error;
+  if (failed) throw failure;
 }
 
-function outcome(result) {
-  if (result.memory?.exceeded) return 'memory-limit';
+function outcome(result: NativeProcessResult): string {
+  if (result.memory.exceeded) return 'memory-limit';
   if (result.timedOut) return 'timeout';
   if (result.signal) return 'crash';
   if (result.error || result.status !== 0) return 'harness-failure';
   return 'completed';
 }
 
-function rejectedCategory(code) {
+function rejectedCategory(code: ParseCode): string {
   if (code === 'PInvalidLimits') return 'invalid-limits';
   if (/Limit$/.test(code)) return 'resource';
-  if (['PUnpairedSurrogate','PInvalidScalar','PLeadingBom'].includes(code)) return 'profile';
+  if (code === 'PUnpairedSurrogate' || code === 'PInvalidScalar' || code === 'PLeadingBom') return 'profile';
   return 'syntax';
 }
 
-export async function nativeVerify({required = false} = {}) {
+export async function nativeVerify({ required = false }: { required?: boolean } = {}): Promise<NativeReport> {
   artifacts();
   const directory = mkdtempSync(resolve(ROOT, 'artifacts/native-'));
   const eventsPath = resolve(directory, 'events.jsonl');
   const reportPath = resolve(directory, 'report.json');
-  const report = {
+  const report: NativeReport = {
     backend:'native', status:'running', required, artifacts:directory,
     events:eventsPath, invocations:0, builds:0,
     concurrency:{textInvocations:4,constructionPipelines:2,mutations:1,overlappingPhases:false,nativeThreadsPerChild:1,gpu:'off'},
@@ -147,23 +371,31 @@ export async function nativeVerify({required = false} = {}) {
     memory:{status:'unverified',method:'shared platform RSS sampler at spawn and every 25ms during native mutation invocations only; not an exact-peak measurement',limitBytes:512*1024*1024,intervalMs:25,invocations:0,sampledInvocations:0,unobservedInvocations:0,samples:0,maximumSampledRssBytes:0,exceeded:false,reason:'No mutation subprocess sampled yet; builds are excluded.'},
     effectBoundary:{close:'Pinned Base File.close returns IO(Unit) and discards close(2) status; close failures cannot be observed through this API. Every opened affine handle is closed before reporting size/read failure.'}
   };
-  let sequence = 0, cc;
-  const event = value => appendFileSync(eventsPath, JSON.stringify(value, (_, v) => typeof v === 'bigint' ? v.toString() : v) + '\n');
-  const persist = () => { writeFileSync(reportPath, json(report)); writeFileSync(resolve(ROOT, 'artifacts/native.json'), json(report)); };
+  let sequence = 0;
+  let cc: string | undefined;
+  const event = (value: unknown): void => {
+    const serialized = JSON.stringify(value, (_key: string, item: unknown) => typeof item === 'bigint' ? item.toString() : item);
+    if (serialized === undefined) throw new Error('Native event is not serializable');
+    appendFileSync(eventsPath, `${serialized}\n`);
+  };
+  const persist = (): void => {
+    writeFileSync(reportPath, json(report));
+    writeFileSync(resolve(ROOT, 'artifacts/native.json'), json(report));
+  };
   // Reconcile every directed/construction phase against the real shared
   // generators and the four native-only scalar payloads. Counts alone can
   // hide a skipped or duplicated case, so each completed phase also freezes
   // its exact ID set in the report.
   const textCoverageCases = [...textCases()];
-  const sharedEncodeIds = new Set([...encoderCases()].map(item => item.id));
-  const nativeEncodeIds = new Set([
+  const sharedEncodeIds = new Set<string>([...encoderCases()].map(item => item.id));
+  const nativeEncodeIds = new Set<string>([
     'native/scalar/1114112/text',
     'native/scalar/1114112/key',
     'native/scalar/4294967295/text',
     'native/scalar/4294967295/key'
   ]);
   const numberCoverageCases = [...numberCases()];
-  const expectedCoverage = {
+  const expectedCoverage: Record<CoveragePhase, Set<string>> = {
     directedText:new Set(textCoverageCases.filter(item => invalidScalars(item).length === 0).map(item => item.id)),
     malformedParse:new Set(textCoverageCases.filter(item => invalidScalars(item).length > 0).map(item => item.id)),
     directedEncodeShared:sharedEncodeIds,
@@ -180,8 +412,16 @@ export async function nativeVerify({required = false} = {}) {
   assert.equal(expectedCoverage.directedEncode.size,92,'Directed encode coverage inventory changed');
   assert.equal(numberCoverageCases.length,42,'Number coverage inventory changed');
   assert.equal(expectedCoverage.number.size,42,'Number coverage IDs are not unique');
-  const observedCoverage = Object.fromEntries(Object.keys(expectedCoverage).map(phase => [phase,new Set()]));
-  const reportCount = {
+  const observedCoverage: Record<CoveragePhase, Set<string>> = {
+    directedText: new Set(),
+    malformedParse: new Set(),
+    directedEncode: new Set(),
+    directedEncodeShared: new Set(),
+    directedEncodeNative: new Set(),
+    number: new Set(),
+    defaultDepth: new Set(),
+  };
+  const reportCount: Record<CoveragePhase, () => number> = {
     directedText:() => report.coverage.directedText,
     malformedParse:() => report.construction.malformedParse,
     directedEncode:() => report.construction.directedEncode,
@@ -190,14 +430,14 @@ export async function nativeVerify({required = false} = {}) {
     number:() => report.construction.number,
     defaultDepth:() => report.coverage.defaultDepth
   };
-  const recordCoverage = (phase,id) => {
+  const recordCoverage = (phase: CoveragePhase, id: string): void => {
     const observed = observedCoverage[phase];
-    assert.ok(observed, `Unknown native coverage phase: ${phase}`);
     assert.ok(!observed.has(id), `${phase}: duplicate native case ${id}`);
     observed.add(id);
   };
-  const reconcileCoverage = phase => {
-    const expected = expectedCoverage[phase], observed = observedCoverage[phase];
+  const reconcileCoverage = (phase: CoveragePhase): void => {
+    const expected = expectedCoverage[phase];
+    const observed = observedCoverage[phase];
     assert.equal(observed.size,expected.size,`${phase}: native coverage count mismatch`);
     assert.deepEqual([...observed].sort(),[...expected].sort(),`${phase}: native coverage IDs do not reconcile`);
     report.coverageIds[phase] = [...observed].sort();
@@ -206,7 +446,14 @@ export async function nativeVerify({required = false} = {}) {
 
   // Own and reap each finite child. Kill its process group on timeout/overflow so
   // a timed-out Bend compiler cannot leave a Clang subprocess behind.
-  async function capture(label, command, args, timeout = 5000, maxBuffer = 16 * 1024 * 1024, caseIds = null) {
+  async function capture(
+    label: string,
+    command: string,
+    args: readonly string[],
+    timeout = 5000,
+    maxBuffer = 16 * 1024 * 1024,
+    caseIds: readonly string[] | null = null,
+  ): Promise<NativeProcessResult> {
     const invocation = ++sequence;
     report.invocations++;
     event({event:'start', invocation, id:label, command, args, timeout, ...(caseIds === null ? {} : {caseIds,caseTimeout:5000})});
@@ -236,38 +483,50 @@ export async function nativeVerify({required = false} = {}) {
     return result;
   }
 
-  function successful(result, label, {silent = false} = {}) {
+  function successful(
+    result: NativeProcessResult,
+    label: string,
+    { silent = false }: { silent?: boolean } = {},
+  ): NativeProcessResult {
     const progressOk = result.caseProgress?.complete && !result.caseProgress.error && result.caseProgress.diagnostics === '';
-    if (result.error || result.signal || result.status !== 0 || result.timedOut || result.overflow || result.killError || result.memory?.exceeded || (result.caseProgress && !progressOk) || (result.stderr !== '' && !progressOk) || (silent && result.stdout !== '')) {
-      const error = new Error(`${label}: native subprocess failure\n${json(result)}`);
+    if (result.error || result.signal || result.status !== 0 || result.timedOut || result.overflow || result.killError || result.memory.exceeded || (result.caseProgress && !progressOk) || (result.stderr !== '' && !progressOk) || (silent && result.stdout !== '')) {
+      const error = new Error(`${label}: native subprocess failure\n${json(result)}`) as NativeError;
       error.nativeResult = result;
-      if (result.memory?.exceeded) error.category = 'native-memory';
+      if (result.memory.exceeded) error.category = 'native-memory';
       throw error;
     }
     return result;
   }
 
-  async function compiler() {
-    const configured = process.env.CC;
-    const candidates = configured ? [configured] : [process.platform === 'darwin' ? '/usr/bin/clang' : 'clang'];
+  async function compiler(): Promise<boolean> {
+    const configured = process.env['CC'];
+    const candidates: string[] = configured
+      ? [configured]
+      : [process.platform === 'darwin' ? '/usr/bin/clang' : 'clang'];
     if (!configured) {
-      const names = new Set();
-      for (const path of (process.env.PATH || '').split(delimiter)) {
+      const names = new Set<string>();
+      for (const path of (process.env['PATH'] || '').split(delimiter)) {
         if (!path) continue;
-        try { for (const name of readdirSync(path)) if (/^clang(?:-\d+)?$/.test(name)) names.add(resolve(path, name)); }
-        catch (error) { if (!['ENOENT','ENOTDIR','EACCES'].includes(error.code)) throw error; }
+        try {
+          for (const name of readdirSync(path)) {
+            if (/^clang(?:-\d+)?$/.test(name)) names.add(resolve(path, name));
+          }
+        } catch (error) {
+          const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+          if (code === undefined || !['ENOENT','ENOTDIR','EACCES'].includes(code)) throw error;
+        }
       }
-      candidates.push(...[...names].sort((a,b) => b.localeCompare(a, 'en', {numeric:true})));
+      candidates.push(...[...names].sort((left,right) => right.localeCompare(left, 'en', {numeric:true})));
     }
-    const probes = [];
+    const probes: NativeProcessResult[] = [];
     for (const candidate of [...new Set(candidates)]) {
       const result = await capture('compiler/discovery', candidate, ['--version'], 5000, 1024*1024);
       probes.push(result);
       if (result.error?.code === 'ENOENT' && !configured) continue;
       successful(result, `Detecting ${candidate}`);
-      const version = /^(?:Apple |\w+ )?clang version (\d+)/m.exec(result.stdout);
-      assert.ok(version, `${candidate} is not Clang; GCC is not a fallback`);
-      assert.ok(Number(version[1]) >= 14, `${candidate} is detected but too old; Clang 14+ required`);
+      const major = /^(?:Apple |\w+ )?clang version (\d+)/m.exec(result.stdout)?.[1];
+      assert.ok(major !== undefined, `${candidate} is not Clang; GCC is not a fallback`);
+      assert.ok(Number(major) >= 14, `${candidate} is detected but too old; Clang 14+ required`);
       cc = candidate;
       report.compiler = {command:cc, version:result.stdout, probes};
       return true;
@@ -276,7 +535,7 @@ export async function nativeVerify({required = false} = {}) {
     return false;
   }
 
-  async function build(source, binary) {
+  async function build(source: string, binary: string): Promise<void> {
     const result = await capture(`build/${source}`, BUN, ['--no-install',COMPILER,source,'-o',binary], 120000, 1024*1024);
     // Pinned cli_report(book,2) is silent for safe compilation; unsafe verdicts,
     // warnings and unfamiliar output fail closed, even when the exit is zero.
@@ -289,7 +548,11 @@ export async function nativeVerify({required = false} = {}) {
   const inputs = resolve(directory,'inputs');
   mkdirSync(inputs);
   const driver = resolve(directory, 'driver');
-  async function invoke(item, mode, originalBytes) {
+  async function invoke(
+    item: NativeInputFixture,
+    mode: string,
+    originalBytes?: Uint8Array,
+  ): Promise<NativeProtocol> {
     const input = resolve(inputs,`${sha256(`${mode}\0${item.id}`)}.json`);
     writeFileSync(input,inputBytes(item.text,originalBytes),{flag:'wx'});
     const args = ['--threads','1','--gpu','off','--',mode,input,...limitFields.map(field => String(item.limits[field]))];
@@ -297,7 +560,7 @@ export async function nativeVerify({required = false} = {}) {
     return resultLine(result.stdout);
   }
 
-  async function directed(item) {
+  async function directed(item: TextFixture): Promise<void> {
     const mode = item.expect.kind === 'done' && item.expect.encoded !== undefined ? 'roundtrip' : 'parse';
     const result = await invoke(item, mode);
     expectResult(result, item.expect, mode === 'parse' ? 'parse-done' : 'done');
@@ -306,21 +569,27 @@ export async function nativeVerify({required = false} = {}) {
   }
 
   let batchNumber = 0;
-  async function constructionBatch(items, category, scalarBoundary = false) {
+  async function constructionBatch(
+    items: readonly ConstructionItem[],
+    category: string,
+    scalarBoundary = false,
+  ): Promise<void> {
     assert.ok(items.length > 0 && items.length <= 64);
+    const first = items[0];
+    assert.ok(first);
     const index = batchNumber++, source = resolve(directory, `construction-${index}.bend`), binary = resolve(directory, `construction-${index}`);
     writeFileSync(source, constructionSource(items));
     await build(source, binary);
-    const caseIds = items.map((_, index) => String(index));
+    const caseIds = items.map((_item, caseIndex) => String(caseIndex));
     const raw = await capture(`construction/${category}/${index}`, binary, ['--threads','1','--gpu','off'], 5000, 16*1024*1024, caseIds);
-    const scalarCodes = items[0].scalarCodes || invalidScalars(items[0]);
+    const scalarCodes = first.scalarCodes ?? invalidScalars(first);
     if (scalarBoundary && (raw.status !== 0 || raw.signal || raw.error)) {
       // Only a specific scalar-constructor diagnostic before any materialized
       // marker establishes this upstream boundary. Crashes/timeouts never do.
       const constructorDiagnostic = /^(?:bend: )?\d+ is not a Unicode scalar value\n$/.test(raw.caseProgress?.diagnostics ?? raw.stderr);
       if (constructorDiagnostic && raw.status !== 0 && !raw.signal && !raw.error && !raw.timedOut && !raw.caseProgress?.error && raw.stdout === '') {
-        report.construction.scalarBoundaries.push({id:items[0].id,codes:scalarCodes,status:'constructor-rejected',encoder:'unattempted',diagnostic:raw.stderr});
-        event({event:'construction-boundary',id:items[0].id,codes:scalarCodes,encoder:'unattempted'});
+        report.construction.scalarBoundaries.push({id:first.id,codes:scalarCodes,status:'constructor-rejected',encoder:'unattempted',diagnostic:raw.stderr});
+        event({event:'construction-boundary',id:first.id,codes:scalarCodes,encoder:'unattempted'});
         return;
       }
     }
@@ -328,14 +597,22 @@ export async function nativeVerify({required = false} = {}) {
     const lines = raw.stdout.split('\n');
     assert.equal(lines.pop(), '', 'Native construction output lacks final newline');
     let cursor = 0;
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i], codes = item.scalarCodes || invalidScalars(item);
+    for (let caseIndex = 0; caseIndex < items.length; caseIndex++) {
+      const item = items[caseIndex];
+      assert.ok(item);
+      const codes = item.scalarCodes ?? invalidScalars(item);
       for (const code of codes) assert.equal(lines[cursor++], `CONSTRUCTED\t${code}`, `${item.id}: scalar not materialized before encoder`);
-      const prefix = `CASE\t${i}\t`, line = lines[cursor++];
+      const prefix = `CASE\t${caseIndex}\t`;
+      const line = lines[cursor++];
       assert.ok(line?.startsWith(prefix), `${item.id}: missing/out-of-order construction result`);
+      if (line === undefined) throw new Error(`${item.id}: missing construction result`);
       const result = protocol(line.slice(prefix.length));
-      const phase = item.operation === 'number' ? 'number-done' : item.operation === 'parse' ? 'parse-done' : 'encode';
-      expectResult(result, item.expect, phase);
+      const expectedSuccess: NativeSuccessKind | 'encode' = item.operation === 'number'
+        ? 'number-done'
+        : item.operation === 'parse'
+          ? 'parse-done'
+          : 'encode';
+      expectResult(result, item.expect, expectedSuccess);
       if (category === 'generated') report.construction.generated++;
       else if (item.operation === 'number') {
         report.construction.number++;
@@ -346,22 +623,32 @@ export async function nativeVerify({required = false} = {}) {
       } else {
         assert.equal(item.operation,'encode',`${item.id}: unknown native construction operation`);
         report.construction.directedEncode++;
-        const phase = nativeEncodeIds.has(item.id) ? 'directedEncodeNative' : 'directedEncodeShared';
+        const phase: 'directedEncodeNative' | 'directedEncodeShared' = nativeEncodeIds.has(item.id)
+          ? 'directedEncodeNative'
+          : 'directedEncodeShared';
         assert.ok(expectedCoverage[phase].has(item.id),`${item.id}: unexpected native directed encode case`);
         recordCoverage(phase,item.id);
         recordCoverage('directedEncode',item.id);
       }
       if (scalarBoundary) report.construction.scalarBoundaries.push({id:item.id,codes,status:'constructed',libraryResult:result});
-      event({event:'case-result',id:item.id,category:`construction/${category}`,status:'pass',result:{...result,text:result.text === undefined ? undefined : {sha256:sha256(result.text),codepoints:[...result.text].length}}});
+      const resultText = result.kind === 'done' || result.kind === 'number-done' ? result.text : undefined;
+      event({
+        event:'case-result',
+        id:item.id,
+        category:`construction/${category}`,
+        status:'pass',
+        result:{...result,text:resultText === undefined ? undefined : {sha256:sha256(resultText),codepoints:[...resultText].length}},
+      });
     }
     assert.equal(cursor, lines.length, 'Unexpected extra native construction output');
     report.construction.batches++;
-    rmSync(source); rmSync(binary);
+    rmSync(source);
+    rmSync(binary);
   }
 
-  async function batches(items, category) {
-    function* chunks() {
-      let batch = [];
+  async function batches(items: Iterable<ConstructionItem>, category: string): Promise<void> {
+    function* chunks(): Generator<{ items: ConstructionItem[]; scalarBoundary: boolean }> {
+      let batch: ConstructionItem[] = [];
       for (const item of items) {
         if (invalidScalars(item).length || item.scalarCodes?.length) {
           if (batch.length) { yield {items:batch,scalarBoundary:false}; batch = []; }
@@ -376,34 +663,66 @@ export async function nativeVerify({required = false} = {}) {
     await bounded(chunks(),2,chunk => constructionBatch(chunk.items,category,chunk.scalarBoundary));
   }
 
-  async function exerciseMutation(item, text = item.text) {
-    const fixture = {...item,text}, oracle = item.kind === 'unconstrained' ? commonScalar(text) : undefined;
+  async function exerciseMutation(
+    item: MutationFixture,
+    text = item.text,
+  ): Promise<NativeProtocol> {
+    const fixture = {...item,text};
+    const oracle = item.kind === 'unconstrained' ? commonScalar(text) : undefined;
     const mode = item.kind === 'invalid' ? 'parse' : 'roundtrip';
     const result = await invoke(fixture,mode);
-    if (item.kind === 'invalid') expectResult(result,{kind:'fail',code:item.code},'parse-done');
-    else if (item.kind === 'equivalent' || oracle) expectResult(result,{kind:'done',text:encodeExpected(oracle?.value || item.value)},'done');
-    else assert.ok(result.kind === 'parse-fail' || result.kind === 'done','Unconstrained mutation must reject structurally or complete an exact native AST roundtrip');
+    if (item.kind === 'invalid') {
+      expectResult(
+        result,
+        {kind:'fail',...(item.code === undefined ? {} : {code:item.code})},
+        'parse-done',
+      );
+    } else if (item.kind === 'equivalent' || oracle) {
+      const expectedValue = oracle?.value ?? item.value;
+      assert.ok(expectedValue);
+      expectResult(result,{kind:'done',text:encodeExpected(expectedValue)},'done');
+    } else {
+      assert.ok(result.kind === 'parse-fail' || result.kind === 'done','Unconstrained mutation must reject structurally or complete an exact native AST roundtrip');
+    }
     return result;
   }
 
-  async function minimize(item, originalError, campaignDeadline) {
-    const signature = error => error.nativeResult ? outcome(error.nativeResult) : error.code || error.name;
+  async function minimize(
+    item: MutationFixture,
+    originalError: unknown,
+    campaignDeadline: number,
+  ) {
+    const signature = (error: unknown): string => {
+      const failure = asNativeError(error);
+      return failure.nativeResult
+        ? outcome(failure.nativeResult)
+        : failure.category ?? failure.name;
+    };
     const wanted = signature(originalError);
-    const admissible = text => {
+    const admissible = (text: string): boolean => {
       if (item.kind === 'unconstrained') return true;
-      if (item.kind === 'invalid') { try { JSON.parse(text); return false; } catch { return true; } }
+      if (item.kind === 'invalid') {
+        try { JSON.parse(text); return false; } catch { return true; }
+      }
       try { assert.deepEqual(JSON.parse(text),JSON.parse(item.text)); return true; } catch { return false; }
     };
     let chars = [...item.text], width = Math.floor(chars.length / 2), attempts = 0;
     const deadline = Math.min(campaignDeadline,performance.now()+10000);
     while (width > 0 && attempts < 64 && performance.now() < deadline) {
       let reduced = false;
-      for (let i = 0; i + width <= chars.length && attempts < 64 && performance.now() < deadline; i += width) {
-        const text = chars.slice(0,i).concat(chars.slice(i+width)).join('');
+      for (let index = 0; index + width <= chars.length && attempts < 64 && performance.now() < deadline; index += width) {
+        const text = chars.slice(0,index).concat(chars.slice(index+width)).join('');
         if (!admissible(text)) continue;
         attempts++;
-        try { await exerciseMutation({...item,id:`${item.id}/minimize/${attempts}`},text); }
-        catch (error) { if (signature(error) === wanted) { chars = [...text]; reduced = true; break; } }
+        try {
+          await exerciseMutation({...item,id:`${item.id}/minimize/${attempts}`},text);
+        } catch (error) {
+          if (signature(error) === wanted) {
+            chars = [...text];
+            reduced = true;
+            break;
+          }
+        }
       }
       if (!reduced) width = Math.floor(width / 2);
     }
@@ -467,7 +786,7 @@ export async function nativeVerify({required = false} = {}) {
     report.comparatorControls = ['wide-100000','late-inequality','deep-10000','number-lexeme','duplicate-member-order','exhaustion-distinct'];
     rmSync(controls); rmSync(controlsBinary);
 
-    const malformedText = [];
+    const malformedText: ConstructionItem[] = [];
     await bounded(textCases(),4,async item => {
       if (invalidScalars(item).length) malformedText.push({...item,operation:'parse'});
       else await directed(item);
@@ -477,47 +796,91 @@ export async function nativeVerify({required = false} = {}) {
     reconcileCoverage('malformedParse');
     await bounded(entries.entries(),4,async ([index,item]) => {
       const entry = report.corpus.entries[index];
+      assert.ok(entry);
       const bytes = readFileSync(resolve(ROOT,'tests/fixtures/JSONTestSuite/test_parsing',item.name));
-      if (item.expected === 'byte-excluded') { assert.equal(item.text,undefined); assert.throws(() => strictDecode(bytes)); return; }
-      inputBytes(item.text,bytes);
+      if (item.expected === 'byte-excluded') {
+        assert.equal(item.text,undefined);
+        assert.throws(() => strictDecode(bytes));
+        return;
+      }
+      assert.ok(item.text !== undefined);
+      const fixture = {...item,text:item.text};
+      inputBytes(fixture.text,bytes);
       report.corpus.attempted++;
       try {
-        const result = await invoke(item,'parse',bytes);
+        const result = await invoke(fixture,'parse',bytes);
         entry.status = result.kind === 'parse-done' ? 'acceptance' : 'structured-rejection';
-        if (result.kind === 'parse-done') report.corpus.accepted++;
-        else { report.corpus.rejected++; entry.code = result.code; entry.offset = result.offset; entry.category = rejectedCategory(result.code); report.corpus.rejectionCategories[entry.category] = (report.corpus.rejectionCategories[entry.category] || 0)+1; }
-        if (item.expected === 'accept') expectResult(result,{kind:'done'},'parse-done');
-        else expectResult(result,{kind:'fail',code:item.expected === 'bom-reject' ? 'PLeadingBom' : item.expected === 'surrogate-reject' ? 'PUnpairedSurrogate' : undefined,offset:item.expected === 'bom-reject' ? 0 : undefined},'parse-done');
-        if (result.kind === 'parse-done') { const roundtrip = await invoke({...item,id:`${item.id}/roundtrip`},'roundtrip',bytes); assert.equal(roundtrip.kind,'done'); entry.roundtrip = 'pass'; }
+        if (result.kind === 'parse-done') {
+          report.corpus.accepted++;
+        } else {
+          assert.ok(result.kind === 'parse-fail');
+          assert.ok(Object.hasOwn(parseCodes, result.code));
+          const code = result.code as ParseCode;
+          report.corpus.rejected++;
+          entry.code = code;
+          entry.offset = result.offset;
+          entry.category = rejectedCategory(code);
+          report.corpus.rejectionCategories[entry.category] = (report.corpus.rejectionCategories[entry.category] || 0)+1;
+        }
+        if (item.expected === 'accept') {
+          expectResult(result,{kind:'done'},'parse-done');
+        } else {
+          const expected: Expectation = item.expected === 'bom-reject'
+            ? {kind:'fail',code:'PLeadingBom',offset:0}
+            : item.expected === 'surrogate-reject'
+              ? {kind:'fail',code:'PUnpairedSurrogate'}
+              : {kind:'fail'};
+          expectResult(result,expected,'parse-done');
+        }
+        if (result.kind === 'parse-done') {
+          const roundtrip = await invoke({...fixture,id:`${item.id}/roundtrip`},'roundtrip',bytes);
+          assert.equal(roundtrip.kind,'done');
+          entry.roundtrip = 'pass';
+        }
         entry.verdict = 'pass';
       } catch (error) {
-        if (entry.status === 'unattempted') entry.status = error.nativeResult ? outcome(error.nativeResult) : 'harness-failure';
-        entry.verdict = 'fail'; entry.error = errorRecord(error); throw error;
+        const failure = asNativeError(error);
+        if (entry.status === 'unattempted') {
+          entry.status = failure.nativeResult ? outcome(failure.nativeResult) : 'harness-failure';
+        }
+        entry.verdict = 'fail';
+        entry.error = errorRecord(error);
+        throw error;
       }
     });
     assert.equal(report.corpus.attempted,293);
     assert.equal(report.corpus.entries.filter(item => item.class === 'y' && item.status === 'acceptance').length,95);
     const deep = entries.find(item => item.name === 'i_structure_500_nested_arrays.json');
-    assert.ok(deep,'Missing default-depth corpus fixture');
-    const defaultDepth = {...deep,id:'corpus/default-depth',limits:limits()};
+    assert.ok(deep?.text !== undefined,'Missing default-depth corpus fixture');
+    const defaultDepth = {...deep,text:deep.text,id:'corpus/default-depth',limits:limits()};
     expectResult(await invoke(defaultDepth,'parse'),{kind:'fail',code:'PDepthLimit',offset:128},'parse-done');
     report.coverage.defaultDepth++;
     recordCoverage('defaultDepth',defaultDepth.id);
     reconcileCoverage('defaultDepth');
 
-    const generatedHashes = new Map();
+    const generatedHashes = new Map<string, string>();
     await bounded(generated(),4,async item => {
-      fixtureFits(item); generatedHashes.set(item.id,sha256(item.text));
-      for (const [suffix,text,field] of [['',item.text,'generatedText'],['/whitespace',whitespace(item.text),'generatedWhitespace'],['/escapes',escapedScalars(item.text),'generatedEscapes']]) {
+      fixtureFits(item);
+      generatedHashes.set(item.id,sha256(item.text));
+      const variants: ReadonlyArray<readonly [string, string, GeneratedCoverageField]> = [
+        ['', item.text, 'generatedText'],
+        ['/whitespace', whitespace(item.text), 'generatedWhitespace'],
+        ['/escapes', escapedScalars(item.text), 'generatedEscapes'],
+      ];
+      for (const [suffix,text,field] of variants) {
         assert.ok(BigInt([...text].length) <= item.limits.max_input);
         expectResult(await invoke({...item,id:item.id+suffix,text},'roundtrip'),{kind:'done',text:item.text},'done');
         report.coverage[field]++;
       }
     });
-    assert.equal(generatedHashes.size,3000); assert.equal(report.coverage.generatedText,3000); assert.equal(report.coverage.generatedWhitespace,3000); assert.equal(report.coverage.generatedEscapes,3000);
-    function* constructedProperties() {
+    assert.equal(generatedHashes.size,3000);
+    assert.equal(report.coverage.generatedText,3000);
+    assert.equal(report.coverage.generatedWhitespace,3000);
+    assert.equal(report.coverage.generatedEscapes,3000);
+    function* constructedProperties(): Generator<ConstructionItem> {
       for (const item of generated()) {
-        fixtureFits(item); assert.equal(sha256(item.text),generatedHashes.get(item.id),'Native constructed fixture seed/order differs from replay');
+        fixtureFits(item);
+        assert.equal(sha256(item.text),generatedHashes.get(item.id),'Native constructed fixture seed/order differs from replay');
         yield {...item,expect:{kind:'done',text:item.text}};
       }
     }
@@ -525,25 +888,52 @@ export async function nativeVerify({required = false} = {}) {
     assert.equal(report.construction.generated,3000,'Every generated AST must be independently constructed natively');
 
     await bounded(commonGenerated(),4,async item => {
-      fixtureFits(item); assert.deepEqual(JSON.parse(item.text),item.host);
-      for (const [suffix,text] of [['',item.text],['/host-text',JSON.stringify(item.host)]]) {
+      fixtureFits(item);
+      assert.deepEqual(JSON.parse(item.text),item.host);
+      const hostText = JSON.stringify(item.host);
+      assert.ok(hostText !== undefined);
+      const variants: ReadonlyArray<readonly [string, string]> = [
+        ['', item.text],
+        ['/host-text', hostText],
+      ];
+      for (const [suffix,text] of variants) {
         const result = await invoke({...item,id:item.id+suffix,text},'roundtrip');
         expectResult(result,{kind:'done',text:item.text},'done');
+        assert.ok(result.kind === 'done');
         assert.deepEqual(JSON.parse(result.text),item.host);
       }
       report.coverage.commonDomain++;
     });
     assert.equal(report.coverage.commonDomain,300);
-    await batches([...encoderCases()].map(item => ({...item,operation:'encode'})),'directed-encode');
+    const encoderConstruction: ConstructionItem[] = [...encoderCases()].map(item => ({
+      ...item,
+      operation:'encode',
+    }));
+    await batches(encoderConstruction,'directed-encode');
     reconcileCoverage('directedEncodeShared');
     assert.equal(report.construction.directedEncode,88,'Shared directed encode construction count changed');
-    await batches([...numberCases()].map(item => ({...item,operation:'number',expect:item.expect.kind === 'done' ? {...item.expect,text:item.expect.value.text} : item.expect})),'number');
+    const numberConstruction: ConstructionItem[] = [...numberCases()].map(item => {
+      if (item.expect.kind === 'fail') return {...item,operation:'number'};
+      const value = item.expect.value;
+      assert.ok(value?.$ === 'Number');
+      return {...item,operation:'number',expect:{...item.expect,text:value.text}};
+    });
+    await batches(numberConstruction,'number');
     reconcileCoverage('number');
     // Native can represent U32 Char payloads that JS String cannot. These are
     // separate from surrogate cases inherited from the host ABI fixtures.
     for (const code of [0x110000,0xffffffff]) {
       for (const key of [false,true]) {
-        const item = {id:`native/scalar/${code}/${key?'key':'text'}`,operation:'encode',limits:limits(),scalarCodes:[code],expression:key ? 'J.Object{Con{J.Member{SCon{bad0,SNil{}},J.Null{}},Nil{}}}' : 'J.Text{SCon{bad0,SNil{}}}',expect:{kind:'fail',code:'EInvalidScalar',offset:key?2:1}};
+        const item: ConstructionItem = {
+          id:`native/scalar/${code}/${key?'key':'text'}`,
+          operation:'encode',
+          limits:limits(),
+          scalarCodes:[code],
+          expression:key
+            ? 'J.Object{Con{J.Member{SCon{bad0,SNil{}},J.Null{}},Nil{}}}'
+            : 'J.Text{SCon{bad0,SNil{}}}',
+          expect:{kind:'fail',code:'EInvalidScalar',offset:key?2:1},
+        };
         await constructionBatch([item],'invalid-scalar',true);
       }
     }
@@ -559,11 +949,16 @@ export async function nativeVerify({required = false} = {}) {
     assert.equal(report.coverage.large,7);
 
     try {
-      report.memory.control = await nativeMemorySelftest();
-      event({event:'memory-control',...report.memory.control});
+      const control = await nativeMemorySelftest();
+      report.memory.control = control;
+      event({event:'memory-control',...control});
     } catch (error) {
-      report.memory.control = error.report || {status:'fail',error:errorRecord(error)};
-      event({event:'memory-control',...report.memory.control});
+      const failure = asNativeError(error);
+      const control = typeof failure.report === 'object' && failure.report !== null
+        ? failure.report as Record<string, unknown>
+        : {status:'fail',error:errorRecord(error)};
+      report.memory.control = control;
+      event({event:'memory-control',...control});
       throw error;
     }
     const campaignStart = performance.now(), campaignDeadline = campaignStart+600000;
@@ -574,7 +969,19 @@ export async function nativeVerify({required = false} = {}) {
       try {
         const result = await exerciseMutation(item);
         report.mutations.counts[item.kind]++;
-        report.mutations.results.push({id:item.id,origin:item.origin,seed:item.seed,hash:item.hash,kind:item.kind,status:result.kind,code:result.code,offset:result.offset});
+        report.mutations.results.push({
+          id:item.id,
+          origin:item.origin,
+          seed:item.seed,
+          hash:item.hash,
+          kind:item.kind,
+          status:result.kind,
+          ...(
+            result.kind === 'parse-fail' || result.kind === 'encode-fail'
+              ? {code:result.code,offset:result.offset}
+              : {}
+          ),
+        });
         report.coverage.mutations++;
       } catch (error) {
         const minimized = await minimize(item,error,campaignDeadline);
@@ -591,19 +998,25 @@ export async function nativeVerify({required = false} = {}) {
     rmSync(file,{force:true}); rmSync(inputs,{recursive:true}); rmSync(driver);
     persist(); return report;
   } catch (error) {
-    report.status = 'fail'; report.error = errorRecord(error);
+    report.status = 'fail';
+    report.error = errorRecord(error);
     event({event:'summary',status:'fail',error:report.error});
     persist();
-    const failure = new Error(`Native verification failed; retained source, input, commands, outputs and report in ${directory}\n${error.stack || error}`);
-    failure.cause = error; failure.report = report; throw failure;
+    const cause = asNativeError(error);
+    const failure = new Error(
+      `Native verification failed; retained source, input, commands, outputs and report in ${directory}\n${cause.stack ?? cause.message}`,
+      { cause },
+    ) as NativeError;
+    failure.report = report;
+    throw failure;
   }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  if (args.some(arg => arg !== '--required')) { console.error('Usage: node scripts/native.mjs [--required]'); process.exitCode = 1; }
+  if (args.some(arg => arg !== '--required')) { console.error('Usage: node scripts/native.ts [--required]'); process.exitCode = 1; }
   else {
     try { const report = await nativeVerify({required:args.includes('--required')}); console.log(json(report)); }
-    catch (error) { console.error(error.stack || error); process.exitCode = 1; }
+    catch (error) { const failure = asNativeError(error); console.error(failure.stack ?? failure.message); process.exitCode = 1; }
   }
 }

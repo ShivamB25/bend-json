@@ -37,9 +37,13 @@ jobs:
           /usr/bin/clang --version
           sw_vers
           printf 'ImageOS=%s ImageVersion=%s\n' "$ImageOS" "$ImageVersion"
+      - name: Install locked TypeScript tooling
+        run: bun install --frozen-lockfile
+      - name: Type-check host harness
+        run: bun run typecheck
       - name: Acquire and verify pinned sources and raw fixtures
-        run: node scripts/setup.mjs
+        run: node scripts/setup.ts
       - name: Run capability gate
-        run: node scripts/probe.mjs
+        run: node scripts/probe.ts
       - name: Run full verification including native
-        run: node scripts/verify.mjs --native=required
+        run: node scripts/verify.ts --native=required

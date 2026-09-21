@@ -9,15 +9,17 @@ An original, pure Bend 2 JSON library with lossless number spelling, Unicode-sca
 ## Pinned prerequisites and setup
 
 - Bend 2.0.16 source revision `15ae0c86f3193b8f645b4bedbc438655b648d0da`.
-- Node **26.9.0** and Bun **1.4.2**.
+- Node **26.9.0**, Bun **1.4.2**, TypeScript **7.0.2** and `@types/node` **26.6.2**.
 - CPU-native runs require Clang 14+; the capability probe used Apple Clang **21.0.0** on Apple M2/arm64. CI is specified to select Clang 18 on Ubuntu.
-- No npm dependencies or global runtime upgrades are needed. Bun invocations use `--no-install`; `BEND_NO_TELEMETRY=1` is set by scripts.
+- Runtime and production-library dependencies remain zero. The locked Bun workspace contains only the TypeScript compiler and Node declarations as dev tooling; Bun invocations of the Bend compiler still use `--no-install`.
 
 From this directory:
 
 ```sh
-node scripts/setup.mjs
-node scripts/probe.mjs
+bun install --frozen-lockfile
+bun run typecheck
+node scripts/setup.ts
+node scripts/probe.ts
 ```
 
 Primary Bend-first checks use the pinned CLI:
@@ -29,9 +31,17 @@ bend PROOF.bend
 bend examples/basic.bend
 ```
 
-These direct commands are the production, proof and example path. `examples/host.mjs`, `tests/*.mjs` and `scripts/bench.mjs` provide cross-backend host-test/benchmark orchestration only; `scripts/setup.mjs`, `probe.mjs` and `verify.mjs` coordinate gates and never replace the Bend implementation or proof terms.
+These direct commands are the production, proof and example path. `examples/host.ts`, `tests/*.ts` and `scripts/bench.ts` provide cross-backend host-test/benchmark orchestration only; `scripts/setup.ts`, `probe.ts` and `verify.ts` coordinate gates and never replace the Bend implementation or proof terms.
 
 The setup script still verifies/acquires the exact source and fixture pins without resetting existing directories. The selected checkout is normally `.tools/bend`; a fresh fallback is `.tools/bend-15ae0c86` if needed. Scripts support `BEND_REF`, `BUN` and `NODE` overrides and check the selected versions. Dirty-default/fallback/explicit-override selection controls preserve source files. Do not modify the upstream checkout. Offline setup verifies retained fixture bytes, tree and license and rejects corruption. `tree.json` preserves original Git `100644`/`100755` modes for tree-hash reconstruction only: never execute or chmod fixture data. Raw fixtures/license remain under `tests/fixtures/JSONTestSuite/`; no other parser or runner is used.
+
+## Language boundary
+
+The JSON implementation is Bend: [`json.bend`](json.bend), [`LAWS.bend`](LAWS.bend), and [`PROOF.bend`](PROOF.bend). The repository currently contains seven maintained `.bend` files (1,896 lines, 70,849 bytes). No TypeScript function parses or encodes production JSON.
+
+The 20 `.ts` files (5,954 lines, 244,327 bytes) are the strict host harness: pinned-source setup, proof/inventory enforcement, raw-byte corpus verification, Node/Bun ABI checks, subprocess supervision, native compilation, mutation recovery, and benchmarks. Those jobs require filesystem, process, timing, RSS, and independent host-oracle APIs that do not belong in the pure Bend runtime. `tsconfig.json` enables strict checking, unchecked-index protection, exact optional properties, erasable syntax, and no emit; CI runs `bun run typecheck` before any behavioral gate.
+
+GitHub Linguist does not currently recognize `.bend` source: [its Bend language PR was closed without merge](https://github.com/github-linguist/linguist/pull/7332). Consequently, GitHub's language bar reports the recognized TypeScript harness rather than the production language. The repository does not misclassify `.bend` as another language or hide the harness with Linguist overrides.
 
 ## Four-function API
 
@@ -63,11 +73,11 @@ bend examples/basic.bend
 For cross-backend host interoperability checks only:
 
 ```sh
-BEND_NO_TELEMETRY=1 bun --no-install --preload ./.tools/bend/bend2/main.ts examples/host.mjs
-BEND_NO_TELEMETRY=1 node --import ./.tools/bend/bend2/main.ts examples/host.mjs
+BEND_NO_TELEMETRY=1 bun --no-install --preload ./.tools/bend/bend2/main.ts examples/host.ts
+BEND_NO_TELEMETRY=1 node --import ./.tools/bend/bend2/main.ts examples/host.ts
 ```
 
-The `.mjs` commands are test/orchestration lanes, not the primary production or proof path. Use the selected pinned source path consistently if setup chooses a fallback checkout.
+The `.ts` commands are test/orchestration lanes, not the primary production or proof path. Use the selected pinned source path consistently if setup chooses a fallback checkout.
 
 ### Node and Bun imports
 
@@ -150,40 +160,42 @@ const limits = {
 
 Input/output limits count codepoints including syntax/escapes. Number limit counts lexeme codepoints; string limit counts decoded scalars per key/text. Depth counts open containers (scalar 0, empty container 1). Values include the root and all containers; keys do not count as values. All fields accept 0..16,777,216 inclusive and are validated at entry. Zero enforces an empty budget. Parse ignores output capacity; encode ignores input capacity; number applies input/number/value capacity.
 
-Gate A exercised primitive strings/lists through 262,144 elements and native consuming computed-state/output-budget loops; the final real-import host workers passed 6,071 cases each, including seven large-input cases and a 99,999-element array plus its root within the default value budget. Final per-case RSS samples reached 385,204,224 bytes on Node and 268,009,472 on Bun, below 512 MiB; both in-campaign supervisor enforcement lanes were unverified (`samples: 0`). These are sampled observations, not continuous peak bounds, throughput measurements or allocation-safety guarantees. Larger custom budgets remain best-effort. Consuming drivers and reverse accumulators avoid growing-prefix copying, but source shape is not a benchmark.
+Gate A exercised primitive strings/lists through 262,144 elements and native consuming computed-state/output-budget loops; the final real-import host workers passed 6,071 cases each, including seven large-input cases and a 99,999-element array plus its root within the default value budget. Final per-case RSS samples reached 396,607,488 bytes on Node and 270,581,760 bytes on Bun, below 512 MiB; both in-campaign supervisor enforcement lanes were unverified (`samples: 0`). These are sampled observations, not continuous peak bounds, throughput measurements or allocation-safety guarantees. Larger custom budgets remain best-effort. Consuming drivers and reverse accumulators avoid growing-prefix copying, but source shape is not a benchmark.
 
 ## Measured benchmark evidence
 
-`artifacts/bench.json` (2026-09-20) records 31 deterministic families/sizes × five operations (`parse`, `encode`, `equality`, `materialize-ast`, `materialize-text`) for each Node, Bun and CPU-native lane: 155 measurements per lane, 465 total. Each case used five warmups and twenty samples. Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process startup and correctness checks were outside timed calls; host eager ABI conversion was inside core calls. Native parse/encode included full result traversal, which was also measured separately; equality was the test-only iterative comparator, not a public API.
+`artifacts/bench.json` (2026-09-21) records 31 deterministic families/sizes × five operations (`parse`, `encode`, `equality`, `materialize-ast`, `materialize-text`) for each Node, Bun and CPU-native lane: 155 measurements per lane, 465 total. Each case used five warmups and twenty samples. Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process startup and correctness checks were outside timed calls; host eager ABI conversion was inside core calls. Native parse/encode included full result traversal, which was also measured separately; equality was the test-only iterative comparator, not a public API.
 
 Representative parse/encode medians (milliseconds; 100,000 ASCII scalars or 100,000 array values) are:
 
 | Fixture | Node | Bun | Native |
 |---|---:|---:|---:|
-| ASCII parse | 37.3421 | 85.01744 | 3.890625 |
-| ASCII encode | 32.80702 | 75.30912 | 2.6640625 |
-| Wide-array parse | 99.46131 | 283.04158 | 18.5625 |
-| Wide-array encode | 78.29123 | 167.41731 | 8.375 |
+| ASCII parse | 38.82494 | 89.82073 | 3.6875 |
+| ASCII encode | 35.23177 | 84.53627 | 2.546875 |
+| Wide-array parse | 103.45115 | 293.07979 | 16.875 |
+| Wide-array encode | 83.24844 | 167.25742 | 8.0625 |
 
-Native batching targeted at least 100 ms, capped at 1,024 iterations. Small records could remain below that target: the artifact marks 83 of 155 native measurements below target precision and 10 below the native clock resolution. The 75 pairwise growth diagnostics report no greater-than-2× normalized signal for all Node/Bun pairs and 72 native pairs; three native depth pairs are below clock resolution. These finite diagnostics are not throughput guarantees or universal linear-complexity proofs. The complete campaign occupied 597,546.447625 ms (about 597.5 s) against the 600,000 ms campaign bound.
+Native batching targeted at least 100 ms, capped at 1,024 iterations. Small records could remain below that target: the artifact marks 84 of 155 native measurements below target precision and nine below the native clock resolution. The 75 pairwise growth diagnostics report no greater-than-2× normalized signal for all Node/Bun pairs and 71 native pairs; four native depth pairs are below clock resolution. These finite diagnostics are not throughput guarantees or universal linear-complexity proofs. The complete campaign occupied 575,961.522834 ms (about 576.0 s) against the 600,000 ms campaign bound.
 
-The benchmark's host RSS values are sampled snapshots (maximum 343,228,416 bytes for Node and 331,808,768 bytes for Bun in this benchmark artifact), not continuous peak measurements or enforced bounds; native benchmark RSS was unmeasured. A passing native benchmark lane demonstrates benchmark-driver execution only; the separate canonical verification report now establishes the complete local native gate. The strict replay of the first 64 generated cases passed three times after flushing diagnostics (`897.4 ms`, `26.7 ms`, `23.2 ms`; [`focused-native-uBBXCx/results.json`](artifacts/focused-native-uBBXCx/results.json)); no timeout was relaxed, no smaller batch was substituted and no 330-second timeout was introduced.
+The benchmark's host RSS values are sampled snapshots (maximum 431,030,272 bytes for Node and 417,431,552 bytes for Bun in this benchmark artifact), not continuous peak measurements or enforced bounds; native benchmark RSS was unmeasured. A passing native benchmark lane demonstrates benchmark-driver execution only; the separate canonical verification report establishes the complete local native gate. The strict replay of the first 64 generated cases passed three times after flushing diagnostics (`897.4 ms`, `26.7 ms`, `23.2 ms`; [`focused-native-uBBXCx/results.json`](artifacts/focused-native-uBBXCx/results.json)); no timeout was relaxed, no smaller batch was substituted and no 330-second timeout was introduced.
 
-The canonical native report covered 12,458 invocations, 65 builds, 63 construction batches, 3,000 independently generated native ASTs, 92 encode cases (88 shared host cases plus four native-only extras), 42 number cases, three malformed parses, 259 directed texts, 9,000 generated text transforms, 300 common-oracle cases, 2,048 mutations, seven large cases and the default-depth case. It sampled 2,047 of 2,048 mutation invocations (one unobserved), with 2,047 RSS samples and a maximum of 1,392,640 bytes against the 512 MiB production ceiling; this is sampled RSS, not an exact continuous peak. Distinct 64 MiB/128 MiB RSS controls passed. Native corpus accounting was 318 fixtures, 293 String calls, 25 byte exclusions, 95 y_ accepts, 176 n_ structured rejects and 22 decoded i_ cases (11 accepts, 11 rejects).
+The canonical required-native report covered 12,458 invocations, 65 builds, 63 construction batches, 3,000 independently generated native ASTs, 92 encode cases (88 shared host cases plus four native-only extras), 42 number cases, three malformed parses, 259 directed texts, 9,000 generated text transforms, 300 common-oracle cases, 2,048 mutations, seven large cases and the default-depth case. It sampled all 2,048 mutation invocations, with 2,048 RSS samples and a maximum of 1,392,640 bytes against the 512 MiB production ceiling; this is sampled RSS, not an exact continuous peak. Distinct 64 MiB/128 MiB RSS controls passed. Native corpus accounting was 318 fixtures, 293 String calls, 25 byte exclusions, 95 y_ accepts, 176 n_ structured rejects and 22 decoded i_ cases (11 accepts, 11 rejects).
 
 ## Verification and CI
 
 ```sh
-node scripts/verify.mjs --proofs
-node scripts/verify.mjs --proof-gate-selftest
-node scripts/verify.mjs
-node scripts/verify.mjs --native=required
-node scripts/bench.mjs
+bun install --frozen-lockfile
+bun run typecheck
+node scripts/verify.ts --proofs
+node scripts/verify.ts --proof-gate-selftest
+node scripts/verify.ts
+node scripts/verify.ts --native=required
+node scripts/bench.ts
 ```
 
-The two proof commands and the final integrated verification passed. `artifacts/verification.json` reports all six gates (`proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun`, `native`) as pass, with 6,071 host cases per runtime and the complete native campaign. The final local report ran from `2026-09-21T08:14:53.445Z` to `2026-09-21T08:23:40.858Z` (527.413 s). The primary production/proof/example path remains direct Bend CLI. Host `.mjs` examples/tests and the benchmark script only orchestrate cross-backend checks; setup/probe/verify scripts coordinate prerequisites and gates. Private push-triggered CI run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) for commit `a3b1a64` also passed both required jobs.
+The locked TypeScript gate, both proof commands and the final required-native integrated verification passed. `artifacts/verification.json` reports all six gates (`proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun`, `native`) as pass, with 6,071 host cases per runtime and the complete native campaign. The final local report ran from `2026-09-21T13:04:07.548Z` to `2026-09-21T13:15:00.068Z` (652.520 s). The primary production/proof/example path remains direct Bend CLI. Host `.ts` examples/tests and the benchmark script only orchestrate cross-backend checks; setup/probe/verify scripts coordinate prerequisites and gates. Private push-triggered CI run [`35589618477`](https://github.com/ShivamB25/bend-json/actions/runs/35589618477) for commit `a3b1a64` is the prior cross-platform record; this TypeScript migration requires a new CI run before that record is superseded.
 
-CI targets Ubuntu 24.04 and macOS 15 with pinned Node/Bun/actions; both run setup then `verify --native=required`. Both jobs passed in private run `35589618477`. [Verification documentation](docs/VERIFICATION.md) records exact action/compiler pins and evidence boundaries.
+CI targets Ubuntu 24.04 and macOS 15 with pinned Node/Bun/actions. Both jobs install the frozen dev-tool lock, run strict type checking, setup, Gate A, and `verify --native=required`. [Verification documentation](docs/VERIFICATION.md) records exact action/compiler pins and evidence boundaries.
 
 All five formal obligations passed the safe checker: every Boolean, concrete null/empty-array/empty-object public roundtrips, and an inductive reversal-accumulator theorem. They do **not** establish a universal JSON roundtrip or grammar soundness theorem. The safe gate requires exact `All terms check.` output and rejects holes, omitted obligations, explicit unsafe annotations and unsafe template-generated instances; all 33 enforcement controls passed. It trusts the pinned checker/Base/compiler/runtime and cannot prevent coordinated rewriting of the law/spec/verifier baseline.
 
