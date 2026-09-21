@@ -2,9 +2,9 @@
 
 An original, pure Bend 2 JSON library with lossless number spelling, Unicode-scalar strings, ordered duplicate-preserving objects and checked compact encoding.
 
-**Development status:** local v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, all 33 proof-gate controls, Bend/Node/Bun examples, both 6,071-case host suites and the canonical native campaign passed; CI execution and publication remain unverified/not performed. See [STATUS.md](STATUS.md), the authoritative [SPEC.md](SPEC.md), and [docs/VERIFICATION.md](docs/VERIFICATION.md) for exact evidence boundaries.
+**Development status:** local v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, all 33 proof-gate controls, Bend/Node/Bun examples, both 6,071-case host suites and the canonical native campaign passed; CI execution remains unverified and no public release/package has been performed. See [STATUS.md](STATUS.md), the authoritative [SPEC.md](SPEC.md), and [docs/VERIFICATION.md](docs/VERIFICATION.md) for exact evidence boundaries.
 
-**Repository status:** private/local. Do not configure a remote or push, publish or upload this repository. `AGENTS.md` is authoritative; `.githooks/pre-push` provides a local technical block when activated with `git config --local core.hooksPath .githooks`. `.gitignore` is only an inclusion safeguard and does not prevent pushes.
+**Repository status:** private GitHub repository at [`shivamb25/bend-json`](https://github.com/shivamb25/bend-json). Pushes are authorized only to that private `origin`; do not add another remote, change visibility, or create a public release/package without explicit authorization. `.gitignore` is only an inclusion safeguard and does not control visibility or protect tracked content.
 
 ## Pinned prerequisites and setup
 
@@ -181,7 +181,7 @@ node scripts/verify.mjs --native=required
 node scripts/bench.mjs
 ```
 
-The two proof commands and the final integrated verification passed. `artifacts/verification.json` reports all six gates (`proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun`, `native`) as pass, with 6,071 host cases per runtime and the complete native campaign. The final report ran from `2026-09-21T08:14:53.445Z` to `2026-09-21T08:23:40.858Z` (527.413 s). The primary production/proof/example path remains direct Bend CLI. Host `.mjs` examples/tests and the benchmark script only orchestrate cross-backend checks; setup/probe/verify scripts coordinate prerequisites and gates. CI remains prepared but unexecuted; no publication or push was performed.
+The two proof commands and the final integrated verification passed. `artifacts/verification.json` reports all six gates (`proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun`, `native`) as pass, with 6,071 host cases per runtime and the complete native campaign. The final report ran from `2026-09-21T08:14:53.445Z` to `2026-09-21T08:23:40.858Z` (527.413 s). The primary production/proof/example path remains direct Bend CLI. Host `.mjs` examples/tests and the benchmark script only orchestrate cross-backend checks; setup/probe/verify scripts coordinate prerequisites and gates. CI remains prepared but unexecuted; private GitHub hosting does not imply a CI run or public release.
 
 CI targets Ubuntu 24.04 and macOS 15 with pinned Node/Bun/actions; both run setup then `verify --native=required`. Workflow execution is unverified. [Verification documentation](docs/VERIFICATION.md) records exact action/compiler pins, intended evidence and observed status.
 
@@ -197,4 +197,4 @@ Original project source and documentation are available under the [MIT License](
 
 The vendored JSONTestSuite fixtures keep their independent upstream MIT license and attribution in [`tests/fixtures/JSONTestSuite/LICENSE`](tests/fixtures/JSONTestSuite/LICENSE), Copyright (c) 2016 Nicolas Seriot. The ignored Bend compiler checkout under `.tools/` is not tracked here and remains under its upstream license.
 
-The license defines permissions if a copy is distributed; it does not change the current private/no-push repository policy.
+The license defines permissions if a copy is distributed; the current GitHub repository remains private and no public release/package is authorized.

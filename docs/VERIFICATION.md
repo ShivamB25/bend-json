@@ -1,6 +1,6 @@
 # Verification record
 
-Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** Setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign and the canonical native campaign passed. CI execution remains unverified; no publication or push was performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
+Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** Setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign and the canonical native campaign passed. CI execution remains unverified; the GitHub repository is private and no public release/package has been performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
 
 ## Revisions and environment
 

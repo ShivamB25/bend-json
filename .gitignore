@@ -1,4 +1,4 @@
-# Ignores do not prevent Git pushes. AGENTS.md and .githooks/pre-push enforce private mode.
+# Ignore rules reduce accidental staging; they do not control remote visibility or protect tracked content.
 .tools/
 artifacts/
 .probes/

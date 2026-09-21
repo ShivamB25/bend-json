@@ -1,8 +1,8 @@
 # Current status
 
-Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure implementation, frozen API, five safe proofs, 33 proof controls, both 6,071-case host suites, examples, benchmark campaign and canonical native campaign passed. CI execution remains unverified; no publication or push was performed.
+Evidence cutoff: 2026-09-21. **Local Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure implementation, frozen API, five safe proofs, 33 proof controls, both 6,071-case host suites, examples, benchmark campaign and canonical native campaign passed. CI execution remains unverified; no public release/package has been performed.
 
-**Repository policy:** this checkout remains private/local. No remote is configured and publishing/pushing is prohibited by `AGENTS.md`; `.githooks/pre-push` is the technical local safeguard. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
+**Repository policy:** the authorized destination is the private GitHub repository `https://github.com/shivamb25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
 
 ## Validated evidence
 
@@ -34,7 +34,7 @@ Native calibration targeted 100 ms and capped batches at 1,024; below-target and
 
 `artifacts/verification.json` has status `pass` for all six gates: `proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun` and `native`. It started at `2026-09-21T08:14:53.445Z`, finished at `2026-09-21T08:23:40.858Z`, and ran for 527.413 seconds. Both host workers passed 6,071 cases with zero failures. No native or benchmark work remains locally.
 
-The remaining delivery boundary is CI: the pinned Ubuntu/macOS workflow is prepared but unexecuted. Main retained canonical reports, native failure/interrupted inputs and the verified diagnostic archive; no release push or publication occurred.
+The remaining delivery boundary is CI: the pinned Ubuntu/macOS workflow is prepared but unexecuted. Main retained canonical reports, native failure/interrupted inputs and the verified diagnostic archive; private repository hosting is not a public release and does not claim CI execution.
 
 ## Diagnosis
 
@@ -70,4 +70,4 @@ Setup/probe, both restricted proof commands and the final integrated verificatio
 - [docs/VERIFICATION.md](docs/VERIFICATION.md): precise commands, artifacts, corpus/memory/benchmark/CI boundaries and source links.
 - `json.bend`, `LAWS.bend`, `PROOF.bend`: pure runtime and separate proof graph. `scripts/tools.mjs`: selected pinned paths and strict checking.
 
-Default profile remains `Limits{1048576n,128n,4096n,262144n,100000n,2097152n}`. The 16,777,216 custom-limit cap is not a memory-safety promise. No source/contract weakening, silent default reduction, publication or CI execution claim is authorized.
+Default profile remains `Limits{1048576n,128n,4096n,262144n,100000n,2097152n}`. The 16,777,216 custom-limit cap is not a memory-safety promise. No source/contract weakening, silent default reduction, public release/package or CI execution claim is authorized.

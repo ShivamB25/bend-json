@@ -4,11 +4,11 @@
 
 This is an original pure Bend 2.0.16 JSON library. Preserve the supplied project directory, `.codegraph/`, raw fixture bytes and unrelated user work. Read `SPEC.md`, `LAWS.bend` and `STATUS.md` before any behavioral change. `SPEC.md` freezes the four supported API definitions, representations, error constructors/precedence, resource units/defaults and formal inventory. Do not weaken it to make code pass.
 
-Do not copy another JSON implementation, add host JSON fallbacks, fork/modify the compiler, publish/push, contact maintainers, or import upstream cluster/release infrastructure. No HTTP/router/TLS/database/schema/JSONPath/derive/package-manager/LSP/framework or GPU-parsing scope. Later typed decoders and byte/incremental APIs are roadmap, not unfinished v0.1 deliverables.
+Do not copy another JSON implementation, add host JSON fallbacks, fork/modify the compiler, contact maintainers, or import upstream cluster/release infrastructure. No HTTP/router/TLS/database/schema/JSONPath/derive/package-manager/LSP/framework or GPU-parsing scope. Later typed decoders and byte/incremental APIs are roadmap, not unfinished v0.1 deliverables.
 
-## Private repository and licensing
+## Private GitHub repository and licensing
 
-This repository is private/local. Do not add a Git remote, push a branch or tag, open a pull request, publish a package/release, upload generated artifacts, or otherwise distribute the repository unless the owner explicitly authorizes a specific destination and this section is changed in a reviewed commit. The tracked `.githooks/pre-push` hook blocks pushes; activate it in each checkout with `git config --local core.hooksPath .githooks`. `.gitignore` reduces accidental inclusion of local credentials and generated state, but it does not prevent publication or protect already tracked content. Never commit secrets.
+This repository is authorized for the private GitHub destination `https://github.com/shivamb25/bend-json`. Configure only `origin` to that exact URL and push only while GitHub reports `PRIVATE` visibility. Do not add another remote, change visibility, publish a public package/release, upload generated artifacts, or otherwise distribute the repository unless the owner explicitly authorizes it. `.gitignore` reduces accidental inclusion of local credentials and generated state, but it does not control remote visibility or protect already tracked content. Never commit secrets.
 
 Original project source and documentation are licensed under the MIT License in `LICENSE.md`, Copyright (c) 2026 Shivam Bansal. The vendored JSONTestSuite bytes retain their separate upstream MIT notice at `tests/fixtures/JSONTestSuite/LICENSE`, Copyright (c) 2016 Nicolas Seriot. Do not replace, merge or remove that fixture notice. Ignored upstream tooling under `.tools/` retains its own licensing and is not part of this repository's tracked source.
 
