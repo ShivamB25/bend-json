@@ -1,12 +1,12 @@
 # Current status
 
-Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure Bend implementation, frozen API, five safe proofs, 33 proof controls, strictly typed TypeScript host harness, both 6,071-case host suites, examples, benchmark campaign, required-native campaign and private Ubuntu/macOS CI passed. No public release/package has been performed. **Open for the current tree:** the later per-call ABI validator (`checkedCore`) passed typecheck, proofs, both self-tests and 6,073 host cases per runtime locally, but its local required-native gate failed on a compile timeout (see [Current tree](#current-tree)).
+Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance was completed on 2026-09-21 for commit `e21de47` and the approved Bend 2.0.16 pin; the current tree has not yet passed it.** On that date the pure Bend implementation, frozen API, five safe proofs, 33 proof controls, strictly typed TypeScript host harness, both 6,071-case host suites, examples, benchmark campaign, required-native campaign and private Ubuntu/macOS CI passed. No public release/package has been performed. **Open for the current tree:** the later per-call ABI validator (`checkedCore`) passed typecheck, proofs, both self-tests and 6,073 host cases per runtime locally, but its local required-native gate failed on a compile timeout (see [Current tree](#current-tree)).
 
 **Repository policy:** the authorized destination is the private GitHub repository `https://github.com/ShivamB25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
 
 **Language boundary:** `json.bend`, `LAWS.bend` and `PROOF.bend` remain the implementation and proof graph. The 21 `.ts` files are dev-only host orchestration for loaders, corpus bytes, subprocesses, native compilation, mutation recovery and benchmarks; no TypeScript production parser or encoder exists. TypeScript 7.0.2 and `@types/node` 26.6.2 are the only direct locked dev dependencies. GitHub Linguist does not yet recognize `.bend`; after commit `76eace7`, the language API reported exactly `{"TypeScript":242489}` with no JavaScript classification.
 
-## Validated evidence
+## Validated evidence (2026-09-21, `e21de47`)
 
 1. **Pinned setup and strengthened Gate A passed.** Bend 2.0.16 at `15ae0c86f3193b8f645b4bedbc438655b648d0da`, Node v26.9.0, Bun 1.4.2, Apple Clang 21.0.0 (`clang-2100.1.1.101`), Apple M2/arm64. Real imports/ABI and primitive String/List work through 262,144 passed. Native now executes consuming computed-state and output-budget loops, carried failures, zero/exact capacity and reversals; Main observed the strengthened gate complete in 3.46 seconds. Evidence: `artifacts/probe.json`.
 2. **Fixture integrity and source selection passed.** All 318 JSONTestSuite blobs at commit `1ef36fa01286573e846ac449e8683f8833c5b26a`, parsing tree `b936f9acdd24b9f5fefe68b90b9beab2c681137a`, are retained with manifest, original LICENSE and `tree.json`. Original Git `100644`/`100755` modes are provenance for tree hashing only; never execute/chmod data. Main observed offline byte/tree/license verification and corruption rejection, plus dirty-default/fallback/explicit-override controls preserving compiler source files.
@@ -32,7 +32,7 @@ The final canonical report records 12,458 native invocations, 65 builds, 63 cons
 
 Native calibration targeted 100 ms and capped batches at 1,024; 84 native measurements remained below target and nine below clock resolution. Across 75 size-growth pairs per lane, Node/Bun had no greater-than-2× normalized signal; native had 71 such pairs and four below-clock-resolution depth pairs. These finite results do not prove throughput or universal linear complexity. The full typed-harness benchmark passed all 465 measurements in 575,961.522834 ms.
 
-## Final local acceptance
+## Historical local acceptance (2026-09-21, `e21de47`)
 
 The 2026-09-21 required-native local report passed all six gates (`proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun`, `native`, with `required: true`). It ran from `2026-09-21T13:04:07.548Z` to `2026-09-21T13:15:00.068Z` (652.520 s), and both host workers passed 6,071 cases with zero failures. `bun run typecheck` and the 465-measurement benchmark also passed. That report has since been overwritten in the ignored `artifacts/` directory by the run below; the values above are the recorded observation, not a file currently on disk.
 
@@ -56,12 +56,12 @@ The earlier native C-emission timeouts came from U32 literal-pattern expansion i
 
 | Gate | State |
 |---|---|
-| B: frozen API, five safe obligations, nested slice | Passed |
-| C: complete grammar/encoder finite coverage | Node/Bun/native canonical campaign passed |
-| D: independent runtime/resource evidence | Final integrated report passed host-node, host-bun and native gates |
-| E: examples and measured delivery | Examples, benchmark campaign and final evidence promotion passed locally |
-| CI | Private runs `35606110009` (`76eace7`) and `35769222512` (`e21de47`) passed Ubuntu 24.04 and macOS 15 |
-| Current tree required-native | Unresolved locally: host suites passed, native build timed out under swap exhaustion |
+| B: frozen API, five safe obligations, nested slice | Passed (current tree too) |
+| C: complete grammar/encoder finite coverage | 2026-09-21: Node/Bun/native passed. Current tree: Node/Bun passed, native unresolved |
+| D: independent runtime/resource evidence | 2026-09-21: host-node, host-bun and native passed. Current tree: host gates passed, native failed |
+| E: examples and measured delivery | 2026-09-21: examples, benchmark campaign and evidence promotion passed locally |
+| CI | Private runs `35606110009` (`76eace7`) and `35769222512` (`e21de47`) passed Ubuntu 24.04 and macOS 15; no passing run is recorded for the current tree |
+| Current tree required-native | **Failed/unresolved** locally: host suites passed, native build timed out under swap exhaustion |
 
 ## Commands and source pointers
 

@@ -1,6 +1,6 @@
 # Verification record
 
-Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** Setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign, the canonical native campaign and private Ubuntu/macOS CI passed. The GitHub repository is private and no public release/package has been performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
+Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance was completed on 2026-09-21 for commit `e21de47` and the approved Bend 2.0.16 pin; the current tree has not yet passed it.** Historically, setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign, the canonical native campaign and private Ubuntu/macOS CI passed. The GitHub repository is private and no public release/package has been performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
 
 **Open for the current tree:** the later per-call ABI validator passed typecheck, proofs, both self-tests and 6,073 host cases per runtime locally (`2026-09-22T19:48:33.447Z`–`19:54:11.584Z`), but that run's required-native gate failed. The `construction-4.bend` compile was killed at its 120 s deadline while swap was 16,635/17,408 MiB used. The same file compiled alone in 58.68 s (906,919,936-byte peak RSS). The deadline and concurrency were not changed; see [STATUS](../STATUS.md#current-tree). CI run [`35769222512`](https://github.com/ShivamB25/bend-json/actions/runs/35769222512) passed required-native on Ubuntu and macOS for the preceding commit `e21de47`.
 
@@ -40,11 +40,12 @@ Commands run from the project root; scripts set `BEND_NO_TELEMETRY=1`, verify pi
 | `node scripts/probe.ts` | Passed; saved host/native outputs in `artifacts/probe.json` |
 | `node scripts/verify.ts --proofs` | Passed inventory and both safe checks; `artifacts/proofs.json` |
 | `node scripts/verify.ts --proof-gate-selftest` | Passed all 33 controls; `artifacts/proof-gate-selftest.json` |
-| `node scripts/verify.ts` | Final integrated report passed; `artifacts/verification.json` records all six gates and 6,071 host cases per runtime |
-| `node scripts/verify.ts --native=required` | Final canonical native gate passed; `artifacts/native.json` status `pass`, `required: true` |
+| `node scripts/verify.ts` (2026-09-21, historical) | Integrated report passed all six gates with 6,071 host cases per runtime; that local artifact was later overwritten |
+| `node scripts/verify.ts --native=required` (2026-09-21, historical) | Canonical native gate passed with status `pass`, `required: true`; that local artifact was later overwritten |
+| `node scripts/verify.ts --native=required` (current tree `4160adb`, 2026-09-22) | **Failed/unresolved.** `artifacts/verification.json` status `fail`: proofs, both self-tests and 6,073-case host-node/host-bun passed; native failed on the `construction-4.bend` 120 s compile deadline under swap exhaustion |
 | `node scripts/bench.ts` | Passed actual Node/Bun/native lanes; `artifacts/bench.json` records 465 measurements and the watchdog control |
 | Bend and Node/Bun examples in README | Main observed all three execute the nested number/Unicode slice successfully |
-| GitHub Actions workflow | Private run `35606110009` passed Ubuntu 24.04 and macOS 15 for TypeScript migration commit `76eace7` |
+| GitHub Actions workflow | Private runs `35606110009` (`76eace7`) and `35769222512` (`e21de47`) passed Ubuntu 24.04 and macOS 15; no passing run is recorded for the current tree |
 
 Main's source-selection controls covered protected dirty-default checkout, fallback and explicit `BEND_REF`, with source files preserved. Neither selection nor setup may reset/modify an existing checkout. Offline fixture verification uses retained tree metadata and raw bytes rather than silently refetching corrupt data.
 
@@ -70,7 +71,7 @@ BEND_NO_TELEMETRY=1 bun --no-install --preload ./.tools/bend/bend2/main.ts tests
 BEND_NO_TELEMETRY=1 node --import ./.tools/bend/bend2/main.ts tests/host.ts regressions conformance properties mutations
 ```
 
-These combined suite selections passed with exit 0 and 6,071 passing/zero failing cases each in [`combined-node.json`](../artifacts/combined-node.json) and [`combined-bun.json`](../artifacts/combined-bun.json). Both use the real pinned preload/import path, including all 2,048 mutations in the same worker; no explicit collection, compiler separation or generated bundle is needed. The `.ts` modules are cross-backend test/benchmark orchestration only, not a production parser or proof substitute.
+On 2026-09-21 these combined suite selections passed with exit 0 and 6,071 passing/zero failing cases each in [`combined-node.json`](../artifacts/combined-node.json) and [`combined-bun.json`](../artifacts/combined-bun.json). Both use the real pinned preload/import path, including all 2,048 mutations in the same worker; no explicit collection, compiler separation or generated bundle is needed. The `.ts` modules are cross-backend test/benchmark orchestration only, not a production parser or proof substitute.
 
 Node's upstream `[DEP0205] module.register()` deprecation warning is expected from the pinned loader ([`bend2/main.ts` lines 604–625](https://github.com/bendlang/bend/blob/15ae0c86f3193b8f645b4bedbc438655b648d0da/bend2/main.ts#L604-L625)) and is retained, not suppressed. Node's current synchronous [`module.registerHooks()`](https://nodejs.org/docs/latest/api/module.html#moduleregisterhooksoptions) API is not a compatible drop-in replacement for this pinned loader; no compiler fork or warning suppression is used. The Bend/native production path does not require Node.
 
@@ -172,7 +173,7 @@ Native protocol is `PARSE_DONE`, `PARSE_FAIL<TAB>CODE<TAB>OFFSET`, `DONE<TAB>COM
 
 ## Runtime memory and dispatch diagnosis
 
-The final combined real-preloaded workers include the compiler/import lifecycle and ran all suites together without explicit collection, private cache clearing, baseline subtraction or a separate compiler. Per-case RSS samples (6,071 each) reached **396,607,488 bytes on Node** and **270,581,760 bytes on Bun**. During all 2,048 mutation cases the same respective maxima were observed, below the 536,870,912-byte ceiling.
+The 2026-09-21 combined real-preloaded workers included the compiler/import lifecycle and ran all suites together without explicit collection, private cache clearing, baseline subtraction or a separate compiler. Per-case RSS samples (6,071 each) reached **396,607,488 bytes on Node** and **270,581,760 bytes on Bun**. During all 2,048 mutation cases the same respective maxima were observed, below the 536,870,912-byte ceiling.
 
 These are sampled maxima, not continuous peak bounds. The independent supervisor recorded no in-campaign Node or Bun samples (`enforcement: "unverified"`, `samples: 0`); do not upgrade per-case observations into a claim of continuous enforcement or an allocation-safety guarantee.
 
