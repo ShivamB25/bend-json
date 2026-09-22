@@ -45,6 +45,7 @@ export interface CaseProgress {
 }
 export interface NativeProcessOptions {
   timeout?: number;
+  drainTimeout?: number;
   maxBuffer?: number;
   env?: NodeJS.ProcessEnv;
   memory?: MemoryOptions | null;
@@ -62,11 +63,12 @@ export interface NativeProcessResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
-  timeoutPhase: 'batch' | 'invocation' | CasePhase | null;
+  timeoutPhase: 'batch' | 'invocation' | 'drain' | CasePhase | null;
   overflow: boolean;
   killError: DescribedError | null;
   memory: MemoryMeasurement;
   caseProgress: CaseProgress | null;
+  drainTimeoutMs: number;
   elapsedMs: number;
 }
 
@@ -84,13 +86,15 @@ function describe(error: unknown): DescribedError | null {
   return { name: 'Error', message: String(error) };
 }
 
-// One finite child, including its compiler descendants, is killed and reaped.
+// One finite child, including compiler descendants that retain its process
+// group or stdio, is bounded through execution and post-exit drain deadlines.
 // RSS is an optional sampled ceiling, never a claim to observe the exact peak.
 export function nativeProcess(
   command: string,
   args: readonly string[],
   {
     timeout = 5000,
+    drainTimeout = 1000,
     maxBuffer = 16 * 1024 * 1024,
     env = ENV,
     memory = null,
@@ -101,6 +105,7 @@ export function nativeProcess(
   }: NativeProcessOptions = {},
 ): Promise<NativeProcessResult> {
   const started = performance.now();
+  assert.ok(Number.isSafeInteger(drainTimeout) && drainTimeout > 0);
   const { promise, resolve: resolveResult } = Promise.withResolvers<NativeProcessResult>();
     const out: Buffer[] = [];
     const err: Buffer[] = [];
@@ -145,14 +150,14 @@ export function nativeProcess(
       detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let drainTimer: NodeJS.Timeout | undefined;
     const kill = (): void => {
       try {
         if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL');
         else child.kill('SIGKILL');
       } catch (problem) {
-        if (!(problem instanceof Error) || (problem as NodeJS.ErrnoException).code !== 'ESRCH') {
-          killError = describe(problem);
-        }
+        const code = problem instanceof Error ? (problem as NodeJS.ErrnoException).code : undefined;
+        if (code !== 'ESRCH') killError = describe(problem);
       }
     };
     const armCase = (phase: CasePhase): void => {
@@ -160,6 +165,7 @@ export function nativeProcess(
       clearTimeout(caseTimer);
       caseProgress.phase = phase;
       caseTimer = setTimeout(() => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
         timedOut = true;
         timeoutPhase = phase;
         kill();
@@ -251,15 +257,32 @@ export function nativeProcess(
     };
     if (memory !== null) {
       child.once('spawn', () => {
-        sample();
+        if (measured.samples === 0) sample();
         monitor = setInterval(sample, memory.intervalMs);
       });
+      // `spawn()` returns with a PID. Sample immediately so a short-lived
+      // mutation cannot exit before its first 25 ms interval.
+      sample();
     }
     const timer = setTimeout(() => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
       timedOut = true;
       timeoutPhase = caseProgress ? 'batch' : 'invocation';
       kill();
     }, timeout);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      clearTimeout(caseTimer);
+      // Keep RSS sampling active until `close`; descendants may still own the
+      // process group's stdio during the bounded post-exit drain.
+      // `exit` reaps the direct child, while `close` waits for inherited stdio.
+      // Bound that drain separately so a descendant cannot hold the run open.
+      drainTimer = setTimeout(() => {
+        timedOut = true;
+        timeoutPhase = 'drain';
+        kill();
+      }, drainTimeout);
+    });
     const collect = (chunks: Buffer[], chunk: Buffer): void => {
       const left = maxBuffer - bytes;
       if (left > 0) chunks.push(chunk.subarray(0, left));
@@ -281,6 +304,7 @@ export function nativeProcess(
       settled = true;
       clearTimeout(timer);
       clearTimeout(caseTimer);
+      clearTimeout(drainTimer);
       clearInterval(monitor);
       if (caseProgress) {
         try {
@@ -322,6 +346,7 @@ export function nativeProcess(
         killError,
         memory: measured,
         caseProgress,
+        drainTimeoutMs: drainTimeout,
         elapsedMs: performance.now() - started,
       });
     });

@@ -13,6 +13,7 @@ import {
   done,
   assertFits,
   codepoints,
+  expectJsonCore,
 } from './support.ts';
 import type { AstNode, Json, Limits } from './support.ts';
 
@@ -164,7 +165,7 @@ async function main(): Promise<void> {
   // Runtime boundary: the parent imports fixture helpers without a Bend loader;
   // only the benchmark worker loads the .bend module after its preload hook.
   const loaded = await import('../json.bend');
-  const Core = loaded.default;
+  const Core = expectJsonCore(loaded.default);
   const bunVersion = process.versions['bun'];
   emit({ event: 'ready', runtime: bunVersion ? `Bun ${bunVersion}` : `Node ${process.version}` });
   let sink = 0;

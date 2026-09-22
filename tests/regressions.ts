@@ -15,6 +15,8 @@ import {
   checkText,
   strictDecode,
   codepoints,
+  assertResult,
+  expectJsonCore,
 } from './support.ts';
 import type {
   Expectation,
@@ -148,6 +150,53 @@ export function* encoderCases(): Generator<EncoderFixture> {
   for(const field of limitFields)yield {id:`encode/cap/${field}`,value:Null(),limits:limits({[field]:16777216n}),expect:{kind:'done',text:'null'}};
 }
 export function* cases(): Generator<TestCase> {
+  yield {
+    id: 'harness/result-code-own-property',
+    run() {
+      for (const errorTag of ['ParseError', 'EncodeError'] as const) {
+        for (const code of ['constructor', 'toString']) {
+          assert.throws(
+            () => assertResult({
+              $: 'Fail',
+              error: { $: errorTag, code: { $: code }, offset: 0n },
+            }),
+            /Unknown error code/,
+          );
+        }
+      }
+    },
+  };
+  yield {
+    id: 'harness/json-core-runtime-boundary',
+    run() {
+      assert.throws(() => expectJsonCore({}), /Json\.parse must be callable/);
+      assert.throws(() => expectJsonCore({
+        'Json.parse': () => ({ $: 'Done', value: Null() }),
+        'Json.encode': () => ({ $: 'Done', value: 'null' }),
+        'Json.number': () => ({ $: 'Done', value: NumberValue('0') }),
+        'Json.default_limits': () => ({}),
+      }), /Limits tag missing/);
+      const guarded = expectJsonCore({
+        'Json.parse': () => ({ $: 'Done', value: Null() }),
+        'Json.encode': () => ({ $: 'Done', value: 'null' }),
+        'Json.number': () => ({ $: 'Done', value: NumberValue('0') }),
+        'Json.default_limits': limits,
+      });
+      assert.deepEqual(guarded['Json.default_limits'](), limits());
+      assertAst(done(guarded['Json.parse']('null', limits())), Null());
+      assert.equal(done(guarded['Json.encode'](Null(), limits())), 'null');
+      assertAst(done(guarded['Json.number']('0', limits())), NumberValue('0'));
+      assert.throws(() => expectJsonCore({
+        'Json.parse': () => ({
+          $: 'Fail',
+          error: { $: 'ParseError', code: { $: 'constructor' }, offset: 0n },
+        }),
+        'Json.encode': () => ({ $: 'Done', value: 'null' }),
+        'Json.number': () => ({ $: 'Done', value: NumberValue('0') }),
+        'Json.default_limits': limits,
+      }), /Unknown error code/);
+    },
+  };
   yield {id:'api/supported-defs-defaults',run(core){const keys: Array<keyof JsonCore>=['Json.parse','Json.encode','Json.number','Json.default_limits'];for(const key of keys)assert.equal(typeof core[key],'function');assert.deepEqual(core['Json.default_limits'](),limits());}};
   yield {id:'bytes/strict-boundary',run(core){for(const bytes of [[0x80],[0xff],[0xc0,0xaf],[0xed,0xa0,0x80],[0xf4,0x90,0x80,0x80],[0xe2,0x82]])assert.throws(()=>strictDecode(Uint8Array.from(bytes)));const bom=strictDecode(Uint8Array.from([0xef,0xbb,0xbf,0x7b,0x7d]));assert.equal(bom,'\ufeff{}');failure(core['Json.parse'](bom,limits()),'PLeadingBom',0);assertAst(done(core['Json.parse'](strictDecode(Buffer.from('"�"')),limits())),T('�'));}};
   for(const item of textCases())yield {id:item.id,run(core){checkText(core,item);}};

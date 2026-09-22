@@ -1,4 +1,2 @@
-import type { JsonCore } from './tests/support.ts';
-
-declare const bendModule: JsonCore;
+declare const bendModule: unknown;
 export default bendModule;

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { expectRecord } from '../types/runtime.ts';
 
 export const parseCodeValues = [
   'PUnexpectedEnd', 'PUnexpectedCharacter', 'PExpectedColon', 'PExpectedCommaOrEnd',
@@ -162,24 +163,79 @@ export function codepoints(text: string): number {
   for (const _unused of text) count++;
   return count;
 }
+function expectLimitsValue(value: unknown): Limits {
+  const record = expectRecord(value, 'Json.default_limits result');
+  assert.ok(Object.hasOwn(record, '$'), 'Limits tag missing');
+  assert.equal(record['$'], 'Limits', 'Invalid Limits tag');
+  for (const field of limitFields) {
+    assert.ok(Object.hasOwn(record, field), `Limits.${field} missing`);
+    const amount = record[field];
+    if (typeof amount !== 'bigint') throw new Error(`Limits.${field} must be a bigint`);
+    assert.ok(amount >= 0n && amount <= 16777216n, `Limits.${field} outside contract`);
+  }
+  return record as unknown as Limits;
+}
 
-
-export function assertResult<T>(result: BendResult<T>): BendResult<T> {
-  assert.ok(typeof result === 'object' && result !== null, 'Result must be an object');
-  assert.ok(result.$ === 'Done' || result.$ === 'Fail', `Invalid Result tag ${String(result.$)}`);
-  if (result.$ === 'Done') {
-    assert.ok(Object.hasOwn(result, 'value'), 'Done.value missing');
+export function assertResult<T>(result: BendResult<T>): BendResult<T>;
+export function assertResult(result: unknown): BendResult<unknown>;
+export function assertResult<T>(result: unknown): BendResult<T> {
+  const record = expectRecord(result, 'Result');
+  assert.ok(Object.hasOwn(record, '$'), 'Result tag missing');
+  const tag = record['$'];
+  assert.ok(tag === 'Done' || tag === 'Fail', `Invalid Result tag ${String(tag)}`);
+  if (tag === 'Done') {
+    assert.ok(Object.hasOwn(record, 'value'), 'Done.value missing');
   } else {
-    const error: JsonError = result.error;
-    assert.ok(error.$ === 'ParseError' || error.$ === 'EncodeError', 'Structured error missing');
-    const knownCodes: Readonly<Partial<Record<JsonErrorCode, true>>> = error.$ === 'ParseError'
+    assert.ok(Object.hasOwn(record, 'error'), 'Fail.error missing');
+    const error = expectRecord(record['error'], 'structured error');
+    assert.ok(Object.hasOwn(error, '$'), 'Structured error tag missing');
+    const errorTag = error['$'];
+    assert.ok(errorTag === 'ParseError' || errorTag === 'EncodeError', 'Structured error missing');
+    assert.ok(Object.hasOwn(error, 'code'), 'Structured error code missing');
+    const codeRecord = expectRecord(error['code'], 'structured error code');
+    assert.ok(Object.hasOwn(codeRecord, '$'), 'Structured error code tag missing');
+    const code = codeRecord['$'];
+    if (typeof code !== 'string') throw new Error('Structured error code must be a string');
+    const knownCodes: Readonly<Partial<Record<JsonErrorCode, true>>> = errorTag === 'ParseError'
       ? parseCodes
       : encodeCodes;
-    assert.ok(knownCodes[error.code.$], 'Unknown error code');
-    assert.equal(typeof error.offset, 'bigint');
-    assert.ok(error.offset >= 0n && error.offset <= 16777217n, 'Invalid error offset');
+    assert.ok(Object.hasOwn(knownCodes, code), 'Unknown error code');
+    assert.ok(Object.hasOwn(error, 'offset'), 'Structured error offset missing');
+    const offset = error['offset'];
+    if (typeof offset !== 'bigint') throw new Error('Structured error offset must be a bigint');
+    assert.ok(offset >= 0n && offset <= 16777217n, 'Invalid error offset');
   }
-  return result;
+  return result as BendResult<T>;
+}
+
+export function expectJsonCore(value: unknown): JsonCore {
+  const core = expectRecord(value, 'Bend JSON module');
+  const parse = core['Json.parse'];
+  const encode = core['Json.encode'];
+  const number = core['Json.number'];
+  const defaultLimits = core['Json.default_limits'];
+  if (typeof parse !== 'function') throw new Error('Json.parse must be callable');
+  if (typeof encode !== 'function') throw new Error('Json.encode must be callable');
+  if (typeof number !== 'function') throw new Error('Json.number must be callable');
+  if (typeof defaultLimits !== 'function') throw new Error('Json.default_limits must be callable');
+  const bounds = expectLimitsValue(Reflect.apply(defaultLimits, core, []));
+  const parsed = assertResult<unknown>(Reflect.apply(parse, core, ['null', bounds]));
+  assert.equal(parsed.$, 'Done', 'Json.parse ABI probe failed');
+  if (parsed.$ === 'Done') {
+    const root = expectRecord(parsed.value, 'Json.parse value');
+    assert.equal(root['$'], 'Null', 'Json.parse returned an invalid probe value');
+  }
+  const encoded = assertResult<unknown>(Reflect.apply(encode, core, [Null(), bounds]));
+  assert.equal(encoded.$, 'Done', 'Json.encode ABI probe failed');
+  if (encoded.$ === 'Done') assert.equal(encoded.value, 'null', 'Json.encode returned an invalid probe value');
+  const numeric = assertResult<unknown>(Reflect.apply(number, core, ['0', bounds]));
+  assert.equal(numeric.$, 'Done', 'Json.number ABI probe failed');
+  if (numeric.$ === 'Done') {
+    const numericValue = expectRecord(numeric.value, 'Json.number value');
+    assert.equal(numericValue['$'], 'Number', 'Json.number returned an invalid probe tag');
+    assert.equal(numericValue['text'], '0', 'Json.number returned an invalid probe value');
+  }
+  return core as unknown as JsonCore;
 }
 export function done<T>(result: BendResult<T>): T {
   assertResult(result);

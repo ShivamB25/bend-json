@@ -1,13 +1,15 @@
 import { readFileSync, writeSync } from 'node:fs';
-import Core from '../json.bend';
+import CoreImport from '../json.bend';
 import * as regressions from './regressions.ts';
 import * as conformance from './conformance.ts';
 import * as properties from './properties.ts';
 import * as mutations from './mutations.ts';
+import { expectJsonCore } from './support.ts';
 import type { TestCase } from './support.ts';
 interface Suite {
   cases(): Generator<TestCase>;
 }
+const Core = expectJsonCore(CoreImport);
 const emit = (event: object): void => {
   writeSync(1, `${JSON.stringify(event)}\n`);
 };

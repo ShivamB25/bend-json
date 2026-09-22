@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ROOT, COMPILER, BUN, NODE, ENV, versions, artifacts } from './tools.ts';
 import type { Versions } from './tools.ts';
 import { inventory, proofChecks, proofSelftest } from './proof-gate.ts';
+import { nativeProcess } from './native-process.ts';
 import { corpusEntries } from '../tests/conformance.ts';
 import { parseCodes } from '../tests/support.ts';
 import type { CorpusClassification, CorpusDetail } from '../tests/conformance.ts';
@@ -421,6 +422,31 @@ export async function supervisorSelftest(): Promise<unknown[]> {
     assert.equal(evidence.summary, null);
     output.push({ control: 'timed-out-child', rejected: true, category: failure.category, report: evidence });
   }
+  if (process.platform === 'win32') {
+    output.push({ control: 'native-post-exit-drain', status: 'unverified', reason: 'POSIX process groups unavailable' });
+  } else {
+    const quick = await nativeProcess(
+      NODE,
+      ['-e', 'process.stdout.write("ok")'],
+      { timeout: 1000, drainTimeout: 100 },
+    );
+    assert.equal(quick.timedOut, false);
+    assert.equal(quick.stdout, 'ok');
+    assert.equal(quick.killError, null);
+    output.push({ control: 'native-clean-exit-drain', status: 'pass', result: quick });
+    const holder = `const {spawn}=require("node:child_process");const child=spawn(process.execPath,["-e","setTimeout(()=>{},60000)"],{stdio:["ignore","inherit","inherit"]});child.unref();`;
+    const drained = await nativeProcess(
+      NODE,
+      ['-e', holder],
+      { timeout: 1000, drainTimeout: 100 },
+    );
+    assert.equal(drained.status, 0);
+    assert.equal(drained.signal, null);
+    assert.equal(drained.timedOut, true);
+    assert.equal(drained.timeoutPhase, 'drain');
+    assert.equal(drained.killError, null);
+    output.push({ control: 'native-post-exit-drain', status: 'pass', result: drained });
+  }
   // Intentional cycle break: controls import supervise from this module.
   const { failureEvidenceSelftest } = await import('./supervisor-controls.ts');
   output.push(...await failureEvidenceSelftest());
@@ -536,7 +562,7 @@ export async function verifyHostWorker(
     assert.equal(results.filter(event => event.id.startsWith('mutation/')).length, 2048);
     assert.ok(worker.summary);
     assert.equal(worker.summary.memory.campaign.samples, 2048);
-    assert.equal(results.length, 6071);
+    assert.equal(results.length, 6073);
     return {
       route: 'real-preloaded-import',
       corpus,

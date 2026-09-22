@@ -992,6 +992,10 @@ export async function nativeVerify({ required = false }: { required?: boolean } 
       assert.ok(performance.now() <= campaignDeadline,'Native mutation campaign exceeded ten minutes');
     }
     assert.equal(report.coverage.mutations,2048);
+    assert.equal(report.memory.invocations,2048,'Every mutation invocation must enter memory accounting');
+    assert.equal(report.memory.sampledInvocations,2048,'Every mutation invocation must produce an RSS sample');
+    assert.equal(report.memory.unobservedInvocations,0,'No mutation invocation may be unobserved');
+    assert.equal(report.memory.samples,2048,'Canonical mutation RSS accounting requires one sample per invocation');
     report.mutations.elapsedMs = performance.now()-campaignStart;
     report.status = 'pass';
     event({event:'summary',status:'pass',coverage:report.coverage,construction:report.construction,corpus:{inventory:318,attempted:293,byteExcluded:25}});
