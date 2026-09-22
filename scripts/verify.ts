@@ -160,8 +160,9 @@ function parseHostEvent(line: string): HostEvent {
   }
   if (parsed.event === 'result') {
     if (!('id' in parsed) || typeof parsed.id !== 'string'
-      || !('status' in parsed) || (parsed.status !== 'pass' && parsed.status !== 'fail')) {
-      throw new Error('result event has an invalid id or status');
+      || !('status' in parsed) || (parsed.status !== 'pass' && parsed.status !== 'fail')
+      || ('message' in parsed && typeof parsed.message !== 'string')) {
+      throw new Error('result event has an invalid id, status or message');
     }
     return parsed as HostResultEvent;
   }
@@ -587,7 +588,7 @@ export async function verify(args = process.argv.slice(2)): Promise<Verification
     '--proof-gate-selftest': true,
     '--native=required': true,
   };
-  for (const arg of args) if (!allowed[arg]) throw new Error(`Unknown argument ${arg}`);
+  for (const arg of args) if (!Object.hasOwn(allowed, arg)) throw new Error(`Unknown argument ${arg}`);
   if (args.includes('--proofs') && args.includes('--proof-gate-selftest')) {
     throw new Error('Choose only one restricted proof mode');
   }

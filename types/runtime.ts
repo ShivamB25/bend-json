@@ -22,6 +22,11 @@ export function expectBoolean(value: unknown, label: string): boolean {
   return value;
 }
 
+export function expectFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${label} must be a finite number`);
+  return value;
+}
+
 export function expectSafeInteger(value: unknown, label: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
     throw new Error(`${label} must be a safe integer`);

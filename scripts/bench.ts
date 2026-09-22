@@ -23,6 +23,15 @@ import type {
   Operation,
   SampleStats,
 } from '../tests/bench-host.ts';
+import {
+  expectArray,
+  expectFiniteNumber,
+  expectLiteral,
+  expectRecord,
+  expectSafeInteger,
+  expectString,
+} from '../types/runtime.ts';
+import type { UnknownRecord } from '../types/runtime.ts';
 
 interface BenchError extends Error {
   code?: string;
@@ -223,55 +232,75 @@ function child(
   return promise;
 }
 
+function parseMeasurement(event: UnknownRecord): Measurement {
+  const count = (key: string): number => {
+    const value = expectSafeInteger(event[key], `Benchmark measurement ${key}`);
+    if (value < 0) throw new Error(`Benchmark measurement ${key} must be non-negative`);
+    return value;
+  };
+  const milliseconds = (value: unknown, label: string): number => {
+    const duration = expectFiniteNumber(value, label);
+    if (duration < 0 || duration > SAMPLE_MS) throw new Error(`${label} is outside the sample deadline`);
+    return duration;
+  };
+  if (event['warmups'] !== WARMUPS || event['samples'] !== SAMPLES || event['batch'] !== 1) {
+    throw new Error('Benchmark measurement does not match the host sampling policy');
+  }
+  const sampleMs = expectArray(event['sampleMs'], 'Benchmark measurement sampleMs')
+    .map((value, index) => milliseconds(value, `Benchmark measurement sampleMs[${index}]`));
+  if (sampleMs.length !== SAMPLES) throw new Error(`Benchmark measurement requires ${SAMPLES} samples`);
+  const limits: Record<string, string> = {};
+  for (const [key, value] of Object.entries(expectRecord(event['limits'], 'Benchmark measurement limits'))) {
+    limits[key] = expectString(value, `Benchmark measurement limits.${key}`);
+  }
+  return {
+    ...event,
+    id: expectString(event['id'], 'Benchmark measurement id'),
+    operation: expectLiteral(event['operation'], OPERATIONS, 'Benchmark measurement operation'),
+    inputBytes: count('inputBytes'),
+    inputCodepoints: count('inputCodepoints'),
+    outputCodepoints: count('outputCodepoints'),
+    values: count('values'),
+    depth: count('depth'),
+    limits,
+    warmups: WARMUPS,
+    samples: SAMPLES,
+    batch: 1,
+    minMs: milliseconds(event['minMs'], 'Benchmark measurement minMs'),
+    medianMs: milliseconds(event['medianMs'], 'Benchmark measurement medianMs'),
+    maxMs: milliseconds(event['maxMs'], 'Benchmark measurement maxMs'),
+    sampleMs,
+  };
+}
+
 function parseBenchmarkEvent(text: string): BenchmarkEvent {
-  const parsed: unknown = JSON.parse(text);
-  if (typeof parsed !== 'object' || parsed === null || !('event' in parsed)) {
-    throw new Error('Benchmark event must be an object with a discriminant');
+  const event = expectRecord(JSON.parse(text), 'Benchmark event');
+  switch (event['event']) {
+    case 'ready':
+      return { event: 'ready', runtime: expectString(event['runtime'], 'Benchmark ready runtime') };
+    case 'start':
+      return {
+        event: 'start',
+        id: expectString(event['id'], 'Benchmark start id'),
+        timeoutMs: expectFiniteNumber(event['timeoutMs'], 'Benchmark start timeoutMs'),
+      };
+    case 'end':
+      return { event: 'end', id: expectString(event['id'], 'Benchmark end id') };
+    case 'measurement':
+      return { ...parseMeasurement(event), event: 'measurement' };
+    case 'summary':
+      if (event['status'] !== 'pass') throw new Error('Benchmark summary status must be pass');
+      return {
+        event: 'summary',
+        status: 'pass',
+        sink: expectFiniteNumber(event['sink'], 'Benchmark summary sink'),
+        rssBytes: expectFiniteNumber(event['rssBytes'], 'Benchmark summary rssBytes'),
+      };
+    case 'failure':
+      return { event: 'failure', message: expectString(event['message'], 'Benchmark failure message') };
+    default:
+      throw new Error(`Unknown benchmark event ${String(event['event'])}`);
   }
-  if (parsed.event === 'ready') {
-    if (!('runtime' in parsed) || typeof parsed.runtime !== 'string') throw new Error('Malformed ready event');
-    return parsed as BenchmarkEvent;
-  }
-  if (parsed.event === 'start') {
-    if (!('id' in parsed) || typeof parsed.id !== 'string'
-      || !('timeoutMs' in parsed) || typeof parsed.timeoutMs !== 'number') {
-      throw new Error('Malformed benchmark start event');
-    }
-    return parsed as BenchmarkEvent;
-  }
-  if (parsed.event === 'end') {
-    if (!('id' in parsed) || typeof parsed.id !== 'string') throw new Error('Malformed benchmark end event');
-    return parsed as BenchmarkEvent;
-  }
-  if (parsed.event === 'measurement') {
-    if (!('id' in parsed) || typeof parsed.id !== 'string'
-      || !('operation' in parsed) || typeof parsed.operation !== 'string'
-      || !OPERATIONS.includes(parsed.operation as Operation)
-      || !('samples' in parsed) || parsed.samples !== SAMPLES
-      || !('sampleMs' in parsed) || !Array.isArray(parsed.sampleMs)
-      || !parsed.sampleMs.every(value => typeof value === 'number'
-        && Number.isFinite(value) && value >= 0 && value <= SAMPLE_MS)
-      || !('inputCodepoints' in parsed) || typeof parsed.inputCodepoints !== 'number'
-      || !('medianMs' in parsed) || typeof parsed.medianMs !== 'number') {
-      throw new Error('Malformed benchmark measurement event');
-    }
-    return parsed as BenchmarkEvent;
-  }
-  if (parsed.event === 'summary') {
-    if (!('status' in parsed) || parsed.status !== 'pass'
-      || !('sink' in parsed) || typeof parsed.sink !== 'number'
-      || !('rssBytes' in parsed) || typeof parsed.rssBytes !== 'number') {
-      throw new Error('Malformed benchmark summary event');
-    }
-    return parsed as BenchmarkEvent;
-  }
-  if (parsed.event === 'failure') {
-    if (!('message' in parsed) || typeof parsed.message !== 'string') {
-      throw new Error('Malformed benchmark failure event');
-    }
-    return parsed as BenchmarkEvent;
-  }
-  throw new Error(`Unknown benchmark event ${String(parsed.event)}`);
 }
 
 async function watchdogSelftest() {

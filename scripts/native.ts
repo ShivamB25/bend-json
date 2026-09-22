@@ -27,7 +27,7 @@ import type { CorpusEntry } from '../tests/conformance.ts';
 import { generated, commonGenerated, whitespace, escapedScalars, largeFixtures } from '../tests/properties.ts';
 import type { GeneratedFixture } from '../tests/properties.ts';
 import { mutationFixtures, commonScalar, retainMutationFailure } from '../tests/mutations.ts';
-import type { MutationFixture, MutationKind } from '../tests/mutations.ts';
+import type { MutationFixture, MutationKind, NativeMutationMinimized } from '../tests/mutations.ts';
 import { limitFields, invalidScalars, constructionSource, controlsSource } from './native-source.ts';
 import type { ConstructionItem } from './native-source.ts';
 import { rss } from './verify.ts';
@@ -691,7 +691,7 @@ export async function nativeVerify({ required = false }: { required?: boolean } 
     item: MutationFixture,
     originalError: unknown,
     campaignDeadline: number,
-  ) {
+  ): Promise<NativeMutationMinimized> {
     const signature = (error: unknown): string => {
       const failure = asNativeError(error);
       return failure.nativeResult
@@ -727,7 +727,12 @@ export async function nativeVerify({ required = false }: { required?: boolean } 
       if (!reduced) width = Math.floor(width / 2);
     }
     const text = chars.join('');
-    return {text,attempts,sha256:sha256(text),failureClass:wanted};
+    const status = performance.now() >= deadline
+      ? 'recovery-deadline'
+      : width > 0 && attempts >= 64
+        ? 'attempt-limit'
+        : 'minimized';
+    return {status,text,attempts,sha256:sha256(text),failureClass:wanted};
   }
 
   try {

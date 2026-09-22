@@ -32,10 +32,17 @@ export interface MutationFixture {
   hash: string;
 }
 export interface MutationMinimized {
-  status?: string;
+  status: string;
   text?: string;
-  attempts?: readonly unknown[] | number;
+  attempts?: readonly unknown[];
   [key: string]: unknown;
+}
+export interface NativeMutationMinimized {
+  status: 'minimized' | 'attempt-limit' | 'recovery-deadline';
+  text: string;
+  attempts: number;
+  sha256: string;
+  failureClass: string;
 }
 function hash(text: string): string {
   return createHash('sha256').update(text).digest('hex');
@@ -182,7 +189,7 @@ export function retainMutationInput(
 export function retainMutationFailure(
   item: MutationFixture,
   error: unknown,
-  minimized?: MutationMinimized,
+  minimized?: MutationMinimized | NativeMutationMinimized,
   backend = process.versions['bun'] ? 'bun' : 'node',
 ): void {
   const directory = resolve(ROOT, 'artifacts/mutations');

@@ -174,9 +174,9 @@ export function* cases(): Generator<TestCase<CorpusDetail>> {
           assert.equal(error.offset, 0n);
         }
         if (entry.expected === 'surrogate-reject') assert.equal(error.code.$, 'PUnpairedSurrogate');
-        const classification: CorpusClassification = resource[error.code.$]
+        const classification: CorpusClassification = Object.hasOwn(resource, error.code.$)
           ? 'resource-reject'
-          : profile[error.code.$]
+          : Object.hasOwn(profile, error.code.$)
             ? 'profile-reject'
             : 'syntax-reject';
         return {

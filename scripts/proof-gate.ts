@@ -10,7 +10,8 @@ type BaselinePair = readonly [id: string, name: string];
 type ReleaseFile = 'SPEC.md' | 'json.bend' | 'LAWS.bend' | 'PROOF.bend';
 type DeclarationKind = 'law' | 'def';
 type CompilerExpectation = 'safe' | 'unsafe' | 'missing-import' | 'incomplete' | 'equality-mismatch';
-type FixtureFiles = Record<string, string>;
+type FixtureFiles = Readonly<Record<string, string>>;
+type ReleaseFixture = Record<ReleaseFile, string>;
 interface LawRow {
   id: string;
   name: string;
@@ -287,7 +288,7 @@ function compilerControl(dir: string, expected: CompilerExpectation) {
   return { label, category: expected, rejection, ...evidence };
 }
 
-function fixtureFiles(pairs: readonly BaselinePair[]): FixtureFiles {
+function fixtureFiles(pairs: readonly BaselinePair[]): ReleaseFixture {
   return {
     'SPEC.md': '| ID | Law | Domain/category |\n|---|---|---|\n'
       + pairs.map(([id, name]) => `| ${id} | ${name} | Enforcement fixture only |\n`).join(''),
@@ -319,16 +320,16 @@ export function proofSelftest(): unknown[] {
     const cases: ReadonlyArray<readonly [string, FixtureFiles, CompilerExpectation, string?]> = [
       ['missing-import', { ...tiny, 'PROOF.bend': 'import Base\ndef harmless() -> Nat:\n  0n\n' }, 'missing-import', 'inventory-import'],
       ['unfilled-law', { ...tiny, 'PROOF.bend': 'import Base\nimport ./LAWS.bend as Laws\ndef harmless() -> Nat:\n  0n\n' }, 'incomplete', 'inventory-proof'],
-      ['explicit-todo', { ...tiny, 'PROOF.bend': tiny['PROOF.bend']!.replace('{==}', '?TODO') }, 'incomplete'],
-      ['false-equality', { ...tiny, 'LAWS.bend': tiny['LAWS.bend']!.replace('0n == 0n', '0n == 1n') }, 'equality-mismatch'],
+      ['explicit-todo', { ...tiny, 'PROOF.bend': tiny['PROOF.bend'].replace('{==}', '?TODO') }, 'incomplete'],
+      ['false-equality', { ...tiny, 'LAWS.bend': tiny['LAWS.bend'].replace('0n == 0n', '0n == 1n') }, 'equality-mismatch'],
       ['explicit-unsafe', {
         ...tiny,
-        'PROOF.bend': tiny['PROOF.bend']!.replace('import Base\n', 'import Base\nimport ./unsafe.bend as Unsafe\n'),
+        'PROOF.bend': tiny['PROOF.bend'].replace('import Base\n', 'import Base\nimport ./unsafe.bend as Unsafe\n'),
         'unsafe.bend': 'import Base\n@unsafe\ndef harmless() -> Nat:\n  0n\n',
       }, 'unsafe'],
       ['template-unsafe', {
         ...tiny,
-        'PROOF.bend': tiny['PROOF.bend']!.replace('import Base\n', 'import Base\nimport ./template.bend as Template\n'),
+        'PROOF.bend': tiny['PROOF.bend'].replace('import Base\n', 'import Base\nimport ./template.bend as Template\n'),
         'template.bend': 'import Base\ndef mapped() -> List<Nat>:\n  List.map(~Nat,~Nat,~(x=>x),[0n])\n',
       }, 'unsafe'],
     ];
@@ -346,8 +347,7 @@ export function proofSelftest(): unknown[] {
     const intact = writeFixture(temp, 'inventory-intact', full);
     reports.push({ ...compilerControl(intact, 'safe'), inventory: inventory(intact) });
     for (const file of FILES) {
-      const files = { ...full };
-      delete files[file];
+      const files: FixtureFiles = Object.fromEntries(Object.entries(full).filter(([name]) => name !== file));
       const dir = writeFixture(temp, `missing-file-${file}`, files);
       const rejection = expectedRejection(() => inventory(dir), 'inventory-file', file);
       // When the proof graph is intact, establish that compilation alone passes.
@@ -360,9 +360,9 @@ export function proofSelftest(): unknown[] {
       const row = `| ${id} | ${name} | Enforcement fixture only |\n`;
       for (const kind of ['law', 'proof', 'law-and-proof', 'row'] as const) {
         const files = { ...full };
-        if (kind === 'law' || kind === 'law-and-proof') files['LAWS.bend'] = files['LAWS.bend']!.replace(law, '');
-        if (kind === 'proof' || kind === 'law-and-proof') files['PROOF.bend'] = files['PROOF.bend']!.replace(proof, '');
-        if (kind === 'row') files['SPEC.md'] = files['SPEC.md']!.replace(row, '');
+        if (kind === 'law' || kind === 'law-and-proof') files['LAWS.bend'] = files['LAWS.bend'].replace(law, '');
+        if (kind === 'proof' || kind === 'law-and-proof') files['PROOF.bend'] = files['PROOF.bend'].replace(proof, '');
+        if (kind === 'row') files['SPEC.md'] = files['SPEC.md'].replace(row, '');
         const label = `missing-${kind}-${id}`;
         const dir = writeFixture(temp, label, files);
         const category = kind === 'row' ? 'inventory-baseline' : kind === 'proof' ? 'inventory-proof' : 'inventory-law';
