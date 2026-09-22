@@ -15,7 +15,7 @@ import {
   assertAst,
   codepoints,
 } from './support.ts';
-import type { Json, JsonCore, JsonErrorCode, Limits, TestCase } from './support.ts';
+import type { Json, JsonCore, Limits, ParseCode, TestCase } from './support.ts';
 import { xorshift, commonGenerated, whitespace, escapedScalars } from './properties.ts';
 
 export const mutationSeed = 0x8259F00D;
@@ -26,7 +26,7 @@ export interface MutationFixture {
   limits: Limits;
   kind: MutationKind;
   value?: Json;
-  code?: JsonErrorCode;
+  code?: ParseCode;
   origin: string;
   seed: number;
   hash: string;

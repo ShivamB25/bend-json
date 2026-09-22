@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { expectRecord } from '../types/runtime.ts';
+import { expectBoolean, expectRecord, expectString } from '../types/runtime.ts';
+import type { UnknownRecord } from '../types/runtime.ts';
 
 export const parseCodeValues = [
   'PUnexpectedEnd', 'PUnexpectedCharacter', 'PExpectedColon', 'PExpectedCommaOrEnd',
@@ -86,12 +87,14 @@ export interface EncodeError {
   offset: bigint;
 }
 export type JsonError = ParseError | EncodeError;
-export type BendResult<T> = { $: 'Done'; value: T } | { $: 'Fail'; error: JsonError };
+export type ErrorLayer = JsonError['$'];
+export type LayerError<L extends ErrorLayer> = Extract<JsonError, { $: L }>;
+export type BendResult<T, E extends JsonError = JsonError> = { $: 'Done'; value: T } | { $: 'Fail'; error: E };
 
 export interface JsonCore {
-  'Json.parse'(text: string, bounds: Limits): BendResult<Json>;
-  'Json.encode'(value: Json, bounds: Limits): BendResult<string>;
-  'Json.number'(text: string, bounds: Limits): BendResult<NumberJson>;
+  'Json.parse'(text: string, bounds: Limits): BendResult<Json, ParseError>;
+  'Json.encode'(value: Json, bounds: Limits): BendResult<string, EncodeError>;
+  'Json.number'(text: string, bounds: Limits): BendResult<NumberJson, ParseError>;
   'Json.default_limits'(): Limits;
 }
 
@@ -101,17 +104,17 @@ export interface SuccessExpectation {
   encoded?: string;
   text?: string;
 }
-export interface FailureExpectation {
+export interface FailureExpectation<C extends JsonErrorCode = JsonErrorCode> {
   kind: 'fail';
-  code?: JsonErrorCode;
+  code?: C;
   offset?: number | bigint;
 }
-export type Expectation = SuccessExpectation | FailureExpectation;
+export type Expectation<C extends JsonErrorCode = JsonErrorCode> = SuccessExpectation | FailureExpectation<C>;
 export interface TextFixture {
   id: string;
   text: string;
   limits: Limits;
-  expect: Expectation;
+  expect: Expectation<ParseCode>;
 }
 export interface TestCase<Detail = unknown> {
   id: string;
@@ -163,7 +166,13 @@ export function codepoints(text: string): number {
   for (const _unused of text) count++;
   return count;
 }
-function expectLimitsValue(value: unknown): Limits {
+export type ValueCheck<T> = (value: unknown) => asserts value is T;
+
+function ownField(record: UnknownRecord, field: string, label: string): unknown {
+  assert.ok(Object.hasOwn(record, field), `${label}.${field} missing`);
+  return record[field];
+}
+export function assertLimits(value: unknown): asserts value is Limits {
   const record = expectRecord(value, 'Json.default_limits result');
   assert.ok(Object.hasOwn(record, '$'), 'Limits tag missing');
   assert.equal(record['$'], 'Limits', 'Invalid Limits tag');
@@ -173,24 +182,98 @@ function expectLimitsValue(value: unknown): Limits {
     if (typeof amount !== 'bigint') throw new Error(`Limits.${field} must be a bigint`);
     assert.ok(amount >= 0n && amount <= 16777216n, `Limits.${field} outside contract`);
   }
-  return record as unknown as Limits;
 }
+// Deliberately iterative: neither Bend linked-list width nor tree depth uses the JS stack.
+export function assertJson(value: unknown): asserts value is Json {
+  const work: Array<readonly [unknown, 'json' | 'items' | 'members']> = [[value, 'json']];
+  while (work.length > 0) {
+    const task = work.pop();
+    assert.ok(task);
+    const [node, kind] = task;
+    const record = expectRecord(node, 'Json node');
+    const tag = ownField(record, '$', 'Json node');
+    if (kind !== 'json') {
+      if (tag === 'Nil') continue;
+      assert.equal(tag, 'Con', `Invalid list tag ${String(tag)}`);
+      work.push([ownField(record, 'tail', 'Con'), kind]);
+      const head = ownField(record, 'head', 'Con');
+      if (kind === 'items') {
+        work.push([head, 'json']);
+      } else {
+        const member = expectRecord(head, 'Member');
+        assert.equal(ownField(member, '$', 'Member'), 'Member', 'Invalid Member tag');
+        expectString(ownField(member, 'key', 'Member'), 'Member.key');
+        work.push([ownField(member, 'value', 'Member'), 'json']);
+      }
+      continue;
+    }
+    switch (tag) {
+      case 'Null':
+        break;
+      case 'Boolean':
+        expectBoolean(ownField(record, 'value', 'Boolean'), 'Boolean.value');
+        break;
+      case 'Number':
+        expectString(ownField(record, 'text', 'Number'), 'Number.text');
+        break;
+      case 'Text':
+        expectString(ownField(record, 'value', 'Text'), 'Text.value');
+        break;
+      case 'Array':
+        work.push([ownField(record, 'items', 'Array'), 'items']);
+        break;
+      case 'Object':
+        work.push([ownField(record, 'members', 'Object'), 'members']);
+        break;
+      default:
+        throw new Error(`Invalid Json tag ${String(tag)}`);
+    }
+  }
+}
+export function assertNumberJson(value: unknown): asserts value is NumberJson {
+  const record = expectRecord(value, 'Json.number value');
+  assert.equal(ownField(record, '$', 'Json.number value'), 'Number', 'Json.number returned a non-Number tag');
+  expectString(ownField(record, 'text', 'Number'), 'Number.text');
+}
+export function assertText(value: unknown): asserts value is string {
+  expectString(value, 'Json.encode value');
+}
+const anyValue: ValueCheck<unknown> = () => {};
 
-export function assertResult<T>(result: BendResult<T>): BendResult<T>;
-export function assertResult(result: unknown): BendResult<unknown>;
-export function assertResult<T>(result: unknown): BendResult<T> {
+// Untyped input must name its error layer; only already-typed results may be rechecked without one.
+export function assertResult<T, E extends JsonError>(result: BendResult<T, E>): BendResult<T, E>;
+export function assertResult<T, L extends ErrorLayer>(
+  result: unknown,
+  check: ValueCheck<T>,
+  layer: L,
+): BendResult<T, LayerError<L>>;
+export function assertResult(
+  result: unknown,
+  check: ValueCheck<unknown> = anyValue,
+  layer?: ErrorLayer,
+): BendResult<unknown> {
+  assertResultShape(result, check, layer);
+  return result;
+}
+function assertResultShape<T>(
+  result: unknown,
+  check: ValueCheck<T>,
+  layer: ErrorLayer | undefined,
+): asserts result is BendResult<T> {
   const record = expectRecord(result, 'Result');
   assert.ok(Object.hasOwn(record, '$'), 'Result tag missing');
   const tag = record['$'];
   assert.ok(tag === 'Done' || tag === 'Fail', `Invalid Result tag ${String(tag)}`);
   if (tag === 'Done') {
     assert.ok(Object.hasOwn(record, 'value'), 'Done.value missing');
+    check(record['value']);
   } else {
     assert.ok(Object.hasOwn(record, 'error'), 'Fail.error missing');
     const error = expectRecord(record['error'], 'structured error');
     assert.ok(Object.hasOwn(error, '$'), 'Structured error tag missing');
     const errorTag = error['$'];
     assert.ok(errorTag === 'ParseError' || errorTag === 'EncodeError', 'Structured error missing');
+    if (layer !== undefined && errorTag !== layer) throw new Error(`Expected ${layer}, got ${errorTag}`);
     assert.ok(Object.hasOwn(error, 'code'), 'Structured error code missing');
     const codeRecord = expectRecord(error['code'], 'structured error code');
     assert.ok(Object.hasOwn(codeRecord, '$'), 'Structured error code tag missing');
@@ -205,37 +288,65 @@ export function assertResult<T>(result: unknown): BendResult<T> {
     if (typeof offset !== 'bigint') throw new Error('Structured error offset must be a bigint');
     assert.ok(offset >= 0n && offset <= 16777217n, 'Invalid error offset');
   }
-  return result as BendResult<T>;
 }
 
-export function expectJsonCore(value: unknown): JsonCore {
+// Raw Bend ABI: callability is checked, every return value stays unknown.
+export interface JsonAbi {
+  'Json.parse'(text: string, bounds: Limits): unknown;
+  'Json.encode'(value: Json, bounds: Limits): unknown;
+  'Json.number'(text: string, bounds: Limits): unknown;
+  'Json.default_limits'(): unknown;
+}
+function callable(core: UnknownRecord, name: keyof JsonAbi): Function {
+  const method = core[name];
+  if (typeof method !== 'function') throw new Error(`${name} must be callable`);
+  return method;
+}
+export function expectJsonAbi(value: unknown): JsonAbi {
   const core = expectRecord(value, 'Bend JSON module');
-  const parse = core['Json.parse'];
-  const encode = core['Json.encode'];
-  const number = core['Json.number'];
-  const defaultLimits = core['Json.default_limits'];
-  if (typeof parse !== 'function') throw new Error('Json.parse must be callable');
-  if (typeof encode !== 'function') throw new Error('Json.encode must be callable');
-  if (typeof number !== 'function') throw new Error('Json.number must be callable');
-  if (typeof defaultLimits !== 'function') throw new Error('Json.default_limits must be callable');
-  const bounds = expectLimitsValue(Reflect.apply(defaultLimits, core, []));
-  const parsed = assertResult<unknown>(Reflect.apply(parse, core, ['null', bounds]));
+  const parse = callable(core, 'Json.parse');
+  const encode = callable(core, 'Json.encode');
+  const number = callable(core, 'Json.number');
+  const defaultLimits = callable(core, 'Json.default_limits');
+  return {
+    'Json.parse': (text, bounds) => Reflect.apply(parse, core, [text, bounds]),
+    'Json.encode': (json, bounds) => Reflect.apply(encode, core, [json, bounds]),
+    'Json.number': (text, bounds) => Reflect.apply(number, core, [text, bounds]),
+    'Json.default_limits': () => Reflect.apply(defaultLimits, core, []),
+  };
+}
+export const expectParseResult = (value: unknown): BendResult<Json, ParseError> =>
+  assertResult(value, assertJson, 'ParseError');
+export const expectEncodeResult = (value: unknown): BendResult<string, EncodeError> =>
+  assertResult(value, assertText, 'EncodeError');
+export const expectNumberResult = (value: unknown): BendResult<NumberJson, ParseError> =>
+  assertResult(value, assertNumberJson, 'ParseError');
+export function expectLimitsValue(value: unknown): Limits {
+  assertLimits(value);
+  return value;
+}
+// Every call is validated, including full Json trees; callers never see an unchecked value.
+export function checkedCore(abi: JsonAbi): JsonCore {
+  const core: JsonCore = {
+    'Json.parse': (text, bounds) => expectParseResult(abi['Json.parse'](text, bounds)),
+    'Json.encode': (json, bounds) => expectEncodeResult(abi['Json.encode'](json, bounds)),
+    'Json.number': (text, bounds) => expectNumberResult(abi['Json.number'](text, bounds)),
+    'Json.default_limits': () => expectLimitsValue(abi['Json.default_limits']()),
+  };
+  const bounds = core['Json.default_limits']();
+  const parsed = core['Json.parse']('null', bounds);
   assert.equal(parsed.$, 'Done', 'Json.parse ABI probe failed');
-  if (parsed.$ === 'Done') {
-    const root = expectRecord(parsed.value, 'Json.parse value');
-    assert.equal(root['$'], 'Null', 'Json.parse returned an invalid probe value');
-  }
-  const encoded = assertResult<unknown>(Reflect.apply(encode, core, [Null(), bounds]));
+  if (parsed.$ === 'Done') assert.equal(parsed.value.$, 'Null', 'Json.parse returned an invalid probe value');
+  const encoded = core['Json.encode'](Null(), bounds);
   assert.equal(encoded.$, 'Done', 'Json.encode ABI probe failed');
   if (encoded.$ === 'Done') assert.equal(encoded.value, 'null', 'Json.encode returned an invalid probe value');
-  const numeric = assertResult<unknown>(Reflect.apply(number, core, ['0', bounds]));
+  const numeric = core['Json.number']('0', bounds);
   assert.equal(numeric.$, 'Done', 'Json.number ABI probe failed');
-  if (numeric.$ === 'Done') {
-    const numericValue = expectRecord(numeric.value, 'Json.number value');
-    assert.equal(numericValue['$'], 'Number', 'Json.number returned an invalid probe tag');
-    assert.equal(numericValue['text'], '0', 'Json.number returned an invalid probe value');
-  }
-  return core as unknown as JsonCore;
+  if (numeric.$ === 'Done') assert.equal(numeric.value.text, '0', 'Json.number returned an invalid probe value');
+  return core;
+}
+export function expectJsonCore(value: unknown): JsonCore {
+  return checkedCore(expectJsonAbi(value));
 }
 export function done<T>(result: BendResult<T>): T {
   assertResult(result);
@@ -244,11 +355,11 @@ export function done<T>(result: BendResult<T>): T {
     : 'Expected success');
   return result.value;
 }
-export function failure(
-  result: BendResult<unknown>,
-  code?: JsonErrorCode,
+export function failure<E extends JsonError>(
+  result: BendResult<unknown, E>,
+  code?: E['code']['$'],
   offset?: number | bigint,
-): JsonError {
+): E {
   assertResult(result);
   assert.equal(result.$, 'Fail', 'Expected structured failure');
   if (code !== undefined) assert.equal(result.error.code.$, code);

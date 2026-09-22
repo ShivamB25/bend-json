@@ -2,6 +2,8 @@
 
 Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** Setup/probe, all five safe root proofs, all 33 proof controls, actual Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the benchmark campaign, the canonical native campaign and private Ubuntu/macOS CI passed. The GitHub repository is private and no public release/package has been performed. Completed evidence is finite and is not a universal grammar, roundtrip or complexity proof.
 
+**Open for the current tree:** the later per-call ABI validator passed typecheck, proofs, both self-tests and 6,073 host cases per runtime locally (`2026-09-22T19:48:33.447Z`–`19:54:11.584Z`), but that run's required-native gate failed. The `construction-4.bend` compile was killed at its 120 s deadline while swap was 16,635/17,408 MiB used. The same file compiled alone in 58.68 s (906,919,936-byte peak RSS). The deadline and concurrency were not changed; see [STATUS](../STATUS.md#current-tree). CI run [`35769222512`](https://github.com/ShivamB25/bend-json/actions/runs/35769222512) passed required-native on Ubuntu and macOS for the preceding commit `e21de47`.
+
 ## Revisions and environment
 
 | Component | Exact selection / observation |
@@ -20,7 +22,7 @@ Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the app
 
 ## Language and type-safety boundary
 
-The runtime and proof graph are Bend (`json.bend`, `LAWS.bend`, `PROOF.bend`). TypeScript is limited to the host harness that performs source acquisition, proof inventory checks, corpus byte validation, Node/Bun ABI testing, subprocess supervision, native compilation, mutation recovery and benchmarks. The locked workspace has no runtime dependencies and only two direct dev dependencies: TypeScript 7.0.2 and `@types/node` 26.6.2. `tsc --noEmit` runs with strict mode, unchecked-index protection, exact optional properties, erasable syntax and explicit `.ts` imports.
+The runtime and proof graph are Bend (`json.bend`, `LAWS.bend`, `PROOF.bend`). TypeScript is limited to the host harness that performs source acquisition, proof inventory checks, corpus byte validation, Node/Bun ABI testing, subprocess supervision, native compilation, mutation recovery and benchmarks. The locked workspace has no runtime dependencies and only two direct dev dependencies: TypeScript 7.0.2 and `@types/node` 26.6.2. `tsc --noEmit` runs with strict mode, unchecked-index protection, exact optional properties, erasable syntax and explicit `.ts` imports. `json.d.bend.ts` declares the Bend module `unknown`; `expectJsonAbi` checks callability, and `checkedCore` validates each call's `Result` envelope, error code/offset, `Limits` and complete `Json` tree before returning typed values. The `harness/json-core-runtime-boundary` regression feeds a module that passes the startup probes and then returns an invalid tree, a non-string encoding and a non-Number number; each later call must throw. Benchmark workers time the callability-checked ABI call (one `Reflect.apply` forwarder, no result validation) and run these validators in the post-call check interval.
 
 GitHub Linguist does not currently classify `.bend` files, so repository language percentages reflect the recognized TypeScript harness. No Linguist override aliases Bend to another language, and no TypeScript parser/encoder substitutes for the Bend API.
 
@@ -182,7 +184,7 @@ Canonical required-native RSS sampling covered all 2,048 mutation invocations, w
 
 ## Benchmarks
 
-`artifacts/bench.json` (dated 2026-09-20) records actual timings for 31 deterministic families/sizes × five operations (`parse`, `encode`, `equality`, `materialize-ast`, `materialize-text`) on each Node, Bun and CPU-native lane: 155 measurements per lane, 465 total. Each case used five warmups and 20 samples. Required families were covered: ASCII and escaped/Unicode strings at 1,024/4,096/16,384/65,536/100,000 scalars; wide arrays at 128/512/2,048/8,192/32,768 and 100,000 values; depths 1/8/32/64/D−1/D; and mixed Unicode/number records at 16/64/256/1,024. D+1 remains a limit regression, not a throughput point.
+`artifacts/bench.json` (dated 2026-09-21, recorded before the `expectJsonAbi`/`checkedCore` split; it was not rerun afterwards) records actual timings for 31 deterministic families/sizes × five operations (`parse`, `encode`, `equality`, `materialize-ast`, `materialize-text`) on each Node, Bun and CPU-native lane: 155 measurements per lane, 465 total. Each case used five warmups and 20 samples. Required families were covered: ASCII and escaped/Unicode strings at 1,024/4,096/16,384/65,536/100,000 scalars; wide arrays at 128/512/2,048/8,192/32,768 and 100,000 values; depths 1/8/32/64/D−1/D; and mixed Unicode/number records at 16/64/256/1,024. D+1 remains a limit regression, not a throughput point.
 
 | Representative fixture | Node parse | Bun parse | Native parse | Node encode | Bun encode | Native encode |
 |---|---:|---:|---:|---:|---:|---:|
@@ -193,9 +195,9 @@ Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process sta
 
 All 75 increasing-size pairs in Node and Bun have no greater-than-2× normalized growth signal. Native has 71 such pairs and four depth pairs below clock resolution. This is finite campaign diagnostics, not a universal linear-complexity or throughput proof. The complete typed-harness benchmark campaign elapsed 575,961.522834 ms (about 576.0 s) against its 600,000 ms deadline. Host RSS snapshots reached 431,030,272 bytes on Node and 417,431,552 bytes on Bun in this benchmark; these are sampled snapshots, not continuous peaks or enforced bounds. Native benchmark RSS was unmeasured.
 The benchmark's passing native lane demonstrates benchmark-driver execution only; the canonical native report separately establishes the complete local native gate. The strict 64-case replay passed three times after flushing diagnostic markers (`897.4 ms`, `26.7 ms`, `23.2 ms`), with no timeout relaxation, smaller batch substitution or 330-second timeout; the watchdog control remains a separate 5-second deadline check.
-The canonical required-native integrated report [`artifacts/verification.json`](../artifacts/verification.json) passed all six gates and ran from `2026-09-21T13:04:07.548Z` to `2026-09-21T13:15:00.068Z` (652.520 s). Native benchmark success and native verification are distinct evidence: the former is the 465-measurement timing artifact, while the latter is the required 12,458-invocation campaign.
+The 2026-09-21 required-native integrated report passed all six gates and ran from `2026-09-21T13:04:07.548Z` to `2026-09-21T13:15:00.068Z` (652.520 s). Native benchmark success and native verification are distinct evidence: the former is the 465-measurement timing artifact, while the latter is the required 12,458-invocation campaign.
 
-`artifacts/release-summary.json` and `artifacts/cleanup.json` remain historical pre-migration records. The current canonical local evidence is `artifacts/verification.json`, `artifacts/native.json` and `artifacts/bench.json`; generated artifacts are ignored and not represented as checked-in release attachments.
+`artifacts/release-summary.json` and `artifacts/cleanup.json` remain historical pre-migration records. The local `artifacts/verification.json` and `artifacts/native.json` now hold the failed 2026-09-22 current-tree run (copies retained as `*-build-timeout-20260922.json`); `artifacts/bench.json` is the 2026-09-21 benchmark. Generated artifacts are ignored and not represented as checked-in release attachments.
 
 ## CI execution evidence
 

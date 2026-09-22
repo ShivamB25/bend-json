@@ -174,7 +174,7 @@ Each row names a finite runtime evidence obligation, not a universal theorem. Ad
 
 ## Measured benchmark evidence
 
-`artifacts/bench.json` (2026-09-20) records 31 deterministic families/sizes × five operations (`parse`, `encode`, `equality`, `materialize-ast`, `materialize-text`) for each Node, Bun and CPU-native lane: 155 measurements per lane, 465 total. Each case used five warmups and 20 samples. Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process startup and correctness checks were outside timed calls; host eager ABI conversion was inside core calls. Native parse/encode included full result traversal, with traversal measured separately; equality was the test-only iterative comparator, not a public API.
+`artifacts/bench.json` (2026-09-21) records 31 deterministic families/sizes × five operations (`parse`, `encode`, `equality`, `materialize-ast`, `materialize-text`) for each Node, Bun and CPU-native lane: 155 measurements per lane, 465 total. Each case used five warmups and 20 samples. Fixture generation, strict UTF-8 decoding, file I/O, loader/compiler/process startup and correctness checks were outside timed calls; host eager ABI conversion was inside core calls. Native parse/encode included full result traversal, with traversal measured separately; equality was the test-only iterative comparator, not a public API.
 
 Representative parse/encode medians (milliseconds) are:
 

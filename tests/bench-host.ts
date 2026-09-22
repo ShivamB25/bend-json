@@ -13,7 +13,10 @@ import {
   done,
   assertFits,
   codepoints,
-  expectJsonCore,
+  checkedCore,
+  expectEncodeResult,
+  expectJsonAbi,
+  expectParseResult,
 } from './support.ts';
 import type { AstNode, Json, Limits } from './support.ts';
 
@@ -165,7 +168,8 @@ async function main(): Promise<void> {
   // Runtime boundary: the parent imports fixture helpers without a Bend loader;
   // only the benchmark worker loads the .bend module after its preload hook.
   const loaded = await import('../json.bend');
-  const Core = expectJsonCore(loaded.default);
+  const Abi = expectJsonAbi(loaded.default);
+  const Core = checkedCore(Abi);
   const bunVersion = process.versions['bun'];
   emit({ event: 'ready', runtime: bunVersion ? `Bun ${bunVersion}` : `Node ${process.version}` });
   let sink = 0;
@@ -188,17 +192,17 @@ async function main(): Promise<void> {
         let verifyOutput: () => void;
         switch (operation) {
           case 'parse': {
-            const output = Core['Json.parse'](item.text, item.limits);
+            const output = Abi['Json.parse'](item.text, item.limits);
             verifyOutput = () => {
-              const value = done(output);
+              const value = done(expectParseResult(output));
               assert.equal(forceAst(value), astCount);
             };
             break;
           }
           case 'encode': {
-            const output = Core['Json.encode'](item.value, item.limits);
+            const output = Abi['Json.encode'](item.value, item.limits);
             verifyOutput = () => {
-              const value = done(output);
+              const value = done(expectEncodeResult(output));
               assert.equal(codepoints(value), textCount);
               assert.equal(value, item.text);
             };
@@ -226,8 +230,8 @@ async function main(): Promise<void> {
           }
         }
         const stopped = performance.now();
-        // Force and verify every output outside the core-call interval. ABI conversion
-        // performed by the loader is necessarily included in the core-call interval.
+        // Validate, force and verify every output outside the core-call interval. ABI
+        // conversion performed by the loader is necessarily included in the core-call interval.
         verifyOutput();
         const end = performance.now();
         if (end - start > SAMPLE_MS) throw new Error(`${id}: sample deadline exceeded`);
@@ -250,7 +254,7 @@ async function main(): Promise<void> {
         postCallForceAndCheckMs: materialization,
         rssBytes: process.memoryUsage().rss,
         timer: 'performance.now',
-        timing: 'core call including eager ABI conversion; traversal/check excluded and separately recorded',
+        timing: 'core call including eager ABI conversion; validation/traversal/check excluded and separately recorded',
       });
     }
   }

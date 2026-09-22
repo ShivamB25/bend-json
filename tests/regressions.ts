@@ -16,13 +16,14 @@ import {
   strictDecode,
   codepoints,
   assertResult,
+  assertJson,
   expectJsonCore,
 } from './support.ts';
 import type {
   Expectation,
   Json,
   JsonCore,
-  JsonErrorCode,
+  EncodeCode,
   Limits,
   ParseCode,
   TestCase,
@@ -47,7 +48,7 @@ export interface EncoderFixture {
   value: Json;
   limits: Limits;
   nativeScalar?: boolean;
-  expect: Expectation;
+  expect: Expectation<EncodeCode>;
 }
 export const validNumbers=['0','-0','1.5','1e3','1E-07','281474976710656','0e+1','-0.0','1E+0007','1e400','1e-10000000'];
 export const invalidNumbers=['01','-','+1','.5','1.','1e','1e+','1e-','NaN','Infinity','-Infinity','0x1','--1',' 1','1 ','','1\n','1+2','1..2'];
@@ -142,7 +143,7 @@ export function* encoderCases(): Generator<EncoderFixture> {
   yield {id:'encode/limits/escape-overflow',value:T('\0x'),limits:limits({max_string:1n}),expect:{kind:'fail',code:'EStringLimit',offset:7}};
   const values: Json[]=[Null(),T(''),T('\0'),T('\b\f\n\r\t'),T('"\\/'),A([Null(),T('😀')]),O([['x',N('-0')],['x',T('é')]])];
   for(let i=0;i<values.length;i++){const value=values[i];assert.ok(value);const text=encodeExpected(value),n=codepoints(text);for(const capacity of [n-1,n,n+1])yield {id:`encode/output/${i}/${capacity}`,value,limits:limits({max_output:BigInt(capacity)}),expect:capacity<n?{kind:'fail',code:'EOutputLimit',offset:capacity}:{kind:'done',text}};}
-  const limitCases: Array<[string, Json, Partial<Omit<Limits, '$'>>, JsonErrorCode, number]> = [['zero-output',Null(),{max_output:0n},'EOutputLimit',0],['zero-values',Null(),{max_values:0n},'EValueLimit',0],['zero-depth',A([]),{max_depth:0n},'EDepthLimit',0],['zero-number',N('0'),{max_number:0n},'ENumberLimit',0],['zero-string',T('a'),{max_string:0n},'EStringLimit',1],['number',N('123'),{max_number:2n},'ENumberLimit',0],['string',T('abc'),{max_string:2n},'EStringLimit',3],['key',O([['abc',Null()]]),{max_string:2n},'EStringLimit',4],['values',A([Null(),Null()]),{max_values:2n},'EValueLimit',6],['depth',A([A([])]),{max_depth:1n},'EDepthLimit',1],['output-precedence',N('bad'),{max_output:0n},'EOutputLimit',0]];
+  const limitCases: Array<[string, Json, Partial<Omit<Limits, '$'>>, EncodeCode, number]> = [['zero-output',Null(),{max_output:0n},'EOutputLimit',0],['zero-values',Null(),{max_values:0n},'EValueLimit',0],['zero-depth',A([]),{max_depth:0n},'EDepthLimit',0],['zero-number',N('0'),{max_number:0n},'ENumberLimit',0],['zero-string',T('a'),{max_string:0n},'EStringLimit',1],['number',N('123'),{max_number:2n},'ENumberLimit',0],['string',T('abc'),{max_string:2n},'EStringLimit',3],['key',O([['abc',Null()]]),{max_string:2n},'EStringLimit',4],['values',A([Null(),Null()]),{max_values:2n},'EValueLimit',6],['depth',A([A([])]),{max_depth:1n},'EDepthLimit',1],['output-precedence',N('bad'),{max_output:0n},'EOutputLimit',0]];
   for(const [id,value,overrides,code,offset] of limitCases)yield {id:`encode/limits/${id}`,value,limits:limits(overrides),expect:{kind:'fail',code,offset}};
   const passCases: Array<[string, Json, Partial<Omit<Limits, '$'>>]> = [['zero-input',Null(),{max_input:0n}],['zero-depth',N('0'),{max_depth:0n}],['zero-string',T(''),{max_string:0n}],['key-no-value-count',O([['k',Null()]]),{max_values:2n}],['astral',T('😀'),{max_string:1n,max_output:3n}]];
   for(const [id,value,overrides] of passCases)yield {id:`encode/limits/pass/${id}`,value,limits:limits(overrides),expect:{kind:'done',text:encodeExpected(value)}};
@@ -159,7 +160,7 @@ export function* cases(): Generator<TestCase> {
             () => assertResult({
               $: 'Fail',
               error: { $: errorTag, code: { $: code }, offset: 0n },
-            }),
+            }, assertJson, errorTag),
             /Unknown error code/,
           );
         }
@@ -186,6 +187,72 @@ export function* cases(): Generator<TestCase> {
       assertAst(done(guarded['Json.parse']('null', limits())), Null());
       assert.equal(done(guarded['Json.encode'](Null(), limits())), 'null');
       assertAst(done(guarded['Json.number']('0', limits())), NumberValue('0'));
+      const lying = expectJsonCore({
+        'Json.parse': (text: string) => text === 'null'
+          ? { $: 'Done', value: Null() }
+          : { $: 'Done', value: { $: 'Array', items: { $: 'Con', head: { $: 'Bogus' }, tail: { $: 'Nil' } } } },
+        'Json.encode': (value: Json) => ({ $: 'Done', value: value.$ === 'Null' ? 'null' : 0 }),
+        'Json.number': (text: string) => ({ $: 'Done', value: text === '0' ? NumberValue('0') : Null() }),
+        'Json.default_limits': limits,
+      });
+      assert.throws(() => lying['Json.parse']('[0]', limits()), /Invalid Json tag Bogus/);
+      assert.throws(() => lying['Json.encode'](Text('x'), limits()), /Json\.encode value must be a string/);
+      assert.throws(() => lying['Json.number']('1', limits()), /non-Number tag/);
+      const nil = { $: 'Nil' };
+      const cell = (head: unknown, tail: unknown = nil): unknown => ({ $: 'Con', head, tail });
+      const member = (key: unknown, value: unknown): unknown => ({ $: 'Member', key, value });
+      const malformed: Array<readonly [unknown, RegExp]> = [
+        [{ $: 'Array', items: { $: 'Cons', head: Null(), tail: nil } }, /Invalid list tag Cons/],
+        [{ $: 'Array', items: { $: 'Con', head: Null() } }, /Con\.tail missing/],
+        [{ $: 'Array', items: Object.assign(Object.create({ head: Null() }), { $: 'Con', tail: nil }) }, /Con\.head missing/],
+        [{ $: 'Array', items: cell(Null(), cell(Null(), { $: 'Con', head: Null(), tail: [] })) }, /Json node must be an object/],
+        [{ $: 'Object', members: cell({ $: 'Pair', key: 'k', value: Null() }) }, /Invalid Member tag/],
+        [{ $: 'Object', members: cell(member(1, Null())) }, /Member\.key must be a string/],
+        [{ $: 'Object', members: cell(member('k', { $: 'Boolean', value: 'true' })) }, /Boolean\.value must be a boolean/],
+        [{ $: 'Object', members: cell(member('k', { $: 'Array', items: cell({ $: 'Number', text: 1 }) })) }, /Number\.text must be a string/],
+        [{ $: 'Object', members: cell(member('k', Null()), cell({ $: 'Member', key: 'j' })) }, /Member\.value missing/],
+      ];
+      for (const [value, pattern] of malformed) {
+        assert.throws(() => assertJson(value), pattern);
+        const nested = expectJsonCore({
+          'Json.parse': (text: string) => ({ $: 'Done', value: text === 'null' ? Null() : value }),
+          'Json.encode': () => ({ $: 'Done', value: 'null' }),
+          'Json.number': () => ({ $: 'Done', value: NumberValue('0') }),
+          'Json.default_limits': limits,
+        });
+        assert.throws(() => nested['Json.parse']('[]', limits()), pattern);
+      }
+      const extent = 200_000;
+      let wide: unknown = nil;
+      for (let index = 0; index < extent; index++) wide = cell(NumberValue(String(index)), wide);
+      assertJson({ $: 'Array', items: wide });
+      let deep: unknown = Null();
+      for (let index = 0; index < extent; index++) deep = { $: 'Object', members: cell(member('k', deep)) };
+      assertJson(deep);
+      let buried: unknown = { $: 'Bogus' };
+      for (let index = 0; index < extent; index++) buried = { $: 'Array', items: cell(buried) };
+      assert.throws(() => assertJson(buried), /Invalid Json tag Bogus/);
+      const fail = (layer: string, code: string): unknown => ({
+        $: 'Fail',
+        error: { $: layer, code: { $: code }, offset: 0n },
+      });
+      const crossed = expectJsonCore({
+        'Json.parse': (input: string) => input === 'null' ? { $: 'Done', value: Null() } : fail('EncodeError', 'EOutputLimit'),
+        'Json.encode': (value: Json) => value.$ === 'Null' ? { $: 'Done', value: 'null' } : fail('ParseError', 'PUnexpectedEnd'),
+        'Json.number': (input: string) => input === '0' ? { $: 'Done', value: NumberValue('0') } : fail('EncodeError', 'EInvalidNumber'),
+        'Json.default_limits': limits,
+      });
+      assert.throws(() => crossed['Json.parse']('[', limits()), /Expected ParseError, got EncodeError/);
+      assert.throws(() => crossed['Json.encode'](Text('x'), limits()), /Expected EncodeError, got ParseError/);
+      assert.throws(() => crossed['Json.number']('x', limits()), /Expected ParseError, got EncodeError/);
+      const miscoded = expectJsonCore({
+        'Json.parse': (input: string) => input === 'null' ? { $: 'Done', value: Null() } : fail('ParseError', 'EOutputLimit'),
+        'Json.encode': (value: Json) => value.$ === 'Null' ? { $: 'Done', value: 'null' } : fail('EncodeError', 'PUnexpectedEnd'),
+        'Json.number': () => ({ $: 'Done', value: NumberValue('0') }),
+        'Json.default_limits': limits,
+      });
+      assert.throws(() => miscoded['Json.parse']('[', limits()), /Unknown error code/);
+      assert.throws(() => miscoded['Json.encode'](Text('x'), limits()), /Unknown error code/);
       assert.throws(() => expectJsonCore({
         'Json.parse': () => ({
           $: 'Fail',

@@ -1,10 +1,10 @@
 # Current status
 
-Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure Bend implementation, frozen API, five safe proofs, 33 proof controls, strictly typed TypeScript host harness, both 6,071-case host suites, examples, benchmark campaign, required-native campaign and private Ubuntu/macOS CI passed. No public release/package has been performed.
+Evidence cutoff: 2026-09-21. **Bend JSON v0.1 acceptance is complete for the approved Bend 2.0.16 pin.** The pure Bend implementation, frozen API, five safe proofs, 33 proof controls, strictly typed TypeScript host harness, both 6,071-case host suites, examples, benchmark campaign, required-native campaign and private Ubuntu/macOS CI passed. No public release/package has been performed. **Open for the current tree:** the later per-call ABI validator (`checkedCore`) passed typecheck, proofs, both self-tests and 6,073 host cases per runtime locally, but its local required-native gate failed on a compile timeout (see [Current tree](#current-tree)).
 
 **Repository policy:** the authorized destination is the private GitHub repository `https://github.com/ShivamB25/bend-json`; only that private `origin` may receive pushes. Additional remotes, visibility changes and public packages/releases require explicit authorization. The original project is MIT-licensed in `LICENSE.md`. Vendored JSONTestSuite fixtures retain their separate upstream MIT notice and attribution in `tests/fixtures/JSONTestSuite/LICENSE`.
 
-**Language boundary:** `json.bend`, `LAWS.bend` and `PROOF.bend` remain the implementation and proof graph. The 20 `.ts` files are dev-only host orchestration for loaders, corpus bytes, subprocesses, native compilation, mutation recovery and benchmarks; no TypeScript production parser or encoder exists. TypeScript 7.0.2 and `@types/node` 26.6.2 are the only direct locked dev dependencies. GitHub Linguist does not yet recognize `.bend`; after commit `76eace7`, the language API reported exactly `{"TypeScript":242489}` with no JavaScript classification.
+**Language boundary:** `json.bend`, `LAWS.bend` and `PROOF.bend` remain the implementation and proof graph. The 21 `.ts` files are dev-only host orchestration for loaders, corpus bytes, subprocesses, native compilation, mutation recovery and benchmarks; no TypeScript production parser or encoder exists. TypeScript 7.0.2 and `@types/node` 26.6.2 are the only direct locked dev dependencies. GitHub Linguist does not yet recognize `.bend`; after commit `76eace7`, the language API reported exactly `{"TypeScript":242489}` with no JavaScript classification.
 
 ## Validated evidence
 
@@ -34,9 +34,19 @@ Native calibration targeted 100 ms and capped batches at 1,024; 84 native measur
 
 ## Final local acceptance
 
-`artifacts/verification.json` has status `pass` for all six gates: `proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun` and `native`, with `required: true` in `artifacts/native.json`. It started at `2026-09-21T13:04:07.548Z`, finished at `2026-09-21T13:15:00.068Z`, and ran for 652.520 seconds. Both host workers passed 6,071 cases with zero failures. `bun run typecheck` and the 465-measurement benchmark also passed.
+The 2026-09-21 required-native local report passed all six gates (`proofs`, `proof-gate-selftest`, `supervisor-selftest`, `host-node`, `host-bun`, `native`, with `required: true`). It ran from `2026-09-21T13:04:07.548Z` to `2026-09-21T13:15:00.068Z` (652.520 s), and both host workers passed 6,071 cases with zero failures. `bun run typecheck` and the 465-measurement benchmark also passed. That report has since been overwritten in the ignored `artifacts/` directory by the run below; the values above are the recorded observation, not a file currently on disk.
 
-Private push-triggered CI run [`35606110009`](https://github.com/ShivamB25/bend-json/actions/runs/35606110009) verified TypeScript migration commit `76eace7`. The Ubuntu 24.04 job (`106353474202`) and macOS 15 job (`106353474305`) both passed frozen dev-tool installation, strict type checking, setup, Gate A and `verify --native=required`.
+Private push-triggered CI run [`35606110009`](https://github.com/ShivamB25/bend-json/actions/runs/35606110009) verified TypeScript migration commit `76eace7`. The Ubuntu 24.04 job (`106353474202`) and macOS 15 job (`106353474305`) both passed frozen dev-tool installation, strict type checking, setup, Gate A and `verify --native=required`. Run [`35769222512`](https://github.com/ShivamB25/bend-json/actions/runs/35769222512) then passed the same workflow on both platforms (jobs `106886390219` Ubuntu, `106886389852` macOS) for commit `e21de47`.
+
+## Current tree
+
+The per-call ABI validator (`expectJsonAbi`/`checkedCore`, method-specific error layers, iterative `Json` tree validation) is newer than both CI runs. Its local `node scripts/verify.ts --native=required` run from `2026-09-22T19:48:33.447Z` to `19:54:11.584Z` has status **fail**:
+
+- `proofs`, `proof-gate-selftest`, `supervisor-selftest`: pass.
+- `host-node`, `host-bun`: pass, 6,073 cases each, zero failures (4,024 original shared-host cases plus 2,048 mutations and the byte-boundary case).
+- `native`: fail after 9,678 invocations and five builds. The compile of `construction-4.bend` was SIGKILLed at its 120 s invocation deadline (120,774.740 ms, `timedOut: true`, empty stdout/stderr, `killError: null`).
+
+Diagnosis: the host machine was exhausting memory, not hitting a code defect. Swap usage was 16,635 of 17,408 MiB with a load average of 46. The same `construction-4.bend` compiled alone to a working binary in 58.68 s wall time, of which 16.22 s was user CPU and 24.64 s system time spent paging, with a 906,919,936-byte peak RSS. The harness runs two construction pipelines at once, so two ~0.9 GB compiles competed for 688–774 MiB of free swap. The 120 s deadline and two-pipeline concurrency were not changed. The failed report is preserved locally as `artifacts/verification-native-build-timeout-20260922.json` and `artifacts/native-build-timeout-20260922.json`. The required-native gate for this tree remains unresolved until a run on a machine with free memory, or CI, passes.
 
 ## Diagnosis
 
@@ -50,7 +60,8 @@ The earlier native C-emission timeouts came from U32 literal-pattern expansion i
 | C: complete grammar/encoder finite coverage | Node/Bun/native canonical campaign passed |
 | D: independent runtime/resource evidence | Final integrated report passed host-node, host-bun and native gates |
 | E: examples and measured delivery | Examples, benchmark campaign and final evidence promotion passed locally |
-| CI | Private run `35606110009` passed Ubuntu 24.04 and macOS 15 for TypeScript migration commit `76eace7` |
+| CI | Private runs `35606110009` (`76eace7`) and `35769222512` (`e21de47`) passed Ubuntu 24.04 and macOS 15 |
+| Current tree required-native | Unresolved locally: host suites passed, native build timed out under swap exhaustion |
 
 ## Commands and source pointers
 
@@ -66,7 +77,7 @@ node scripts/verify.ts --native=required
 node scripts/bench.ts
 ```
 
-Setup/probe, strict TypeScript, both restricted proof commands, the final required-native local verification and the full benchmark passed. `artifacts/verification.json` is the canonical local acceptance report; GitHub run `35606110009` is the cross-platform execution record for the TypeScript migration.
+Setup/probe, strict TypeScript, both restricted proof commands, the 2026-09-21 required-native local verification and the full benchmark passed. GitHub runs `35606110009` and `35769222512` are the cross-platform execution records through `e21de47`; the current tree's required-native gate is open as described above.
 
 - [SPEC.md](SPEC.md): exact API/types/errors/offsets/limits, five formal rows, twelve behavior IDs and roadmap.
 - [README.md](README.md): pinned setup/import/ABI, runnable examples and supported behavior.
