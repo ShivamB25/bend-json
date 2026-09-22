@@ -1,6 +1,6 @@
 # Bend JSON v0.1 contract
 
-Status: v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, 33 proof controls, Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the canonical native campaign and private Ubuntu/macOS CI passed. The GitHub repository is private and no public release/package has been performed. See [STATUS.md](STATUS.md) and [verification evidence](docs/VERIFICATION.md). Finite host results and benchmark diagnostics are not universal grammar, roundtrip or complexity proofs.
+Status: v0.1 acceptance is complete for the approved Bend 2.0.16 pin. Setup/probe, all five safe root obligations, 33 proof controls, Bend/Node/Bun examples, both 6,071-case combined real-import host suites, the canonical native campaign and private Ubuntu/macOS CI passed as of 2026-09-21; the later per-call ABI validator's required-native gate is open (STATUS, Current tree). The GitHub repository is private and no public release/package has been performed. See [STATUS.md](STATUS.md) and [verification evidence](docs/VERIFICATION.md). Finite host results and benchmark diagnostics are not universal grammar, roundtrip or complexity proofs.
 
 ## Representation and supported API
 
